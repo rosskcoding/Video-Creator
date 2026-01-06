@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Design System Tokens - Light Modern */
+    --background: 210 20% 98%;        /* #F9FAFB */
+    --surface: 0 0% 100%;             /* #FFFFFF */
+    --foreground: 220 26% 14%;        /* #111827 */
+    
+    --card: 0 0% 100%;
+    --card-foreground: 220 26% 14%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 26% 14%;
+    
+    --primary: 217 91% 60%;           /* #2563EB */
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 26% 14%;
+    
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;   /* #6B7280 */
+    
+    --accent: 220 14% 96%;
+    --accent-foreground: 220 26% 14%;
+    
+    --destructive: 0 72% 51%;         /* #DC2626 */
+    --destructive-foreground: 0 0% 100%;
+    
+    --success: 142 76% 36%;           /* #16A34A */
+    --warning: 38 92% 50%;            /* #F59E0B */
+    --error: 0 72% 51%;               /* #DC2626 */
+    
+    --border: 220 13% 91%;            /* #E5E7EB */
+    --input: 220 13% 91%;
+    --ring: 217 91% 60%;
+    
+    --radius: 0.75rem;                /* 12px */
+    --radius-lg: 0.75rem;             /* 12px for cards */
+    --radius-md: 0.625rem;            /* 10px for inputs */
+    --radius-sm: 0.5rem;              /* 8px for buttons */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Typography */
+h1 {
+  @apply text-[22px] font-semibold leading-tight;
+}
+
+h2 {
+  @apply text-[15px] font-medium leading-snug;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/30;
+}
+
+/* Slide thumbnail */
+.slide-thumb {
+  @apply transition-all duration-150 cursor-pointer;
+}
+
+.slide-thumb:hover {
+  @apply ring-2 ring-primary/40;
+}
+
+.slide-thumb.active {
+  @apply ring-2 ring-primary;
+}
+
+/* Status chips */
+.status-ready {
+  @apply bg-emerald-50 text-emerald-700 border-emerald-200;
+}
+
+.status-pending {
+  @apply bg-amber-50 text-amber-700 border-amber-200;
+}
+
+.status-missing {
+  @apply bg-red-50 text-red-700 border-red-200;
+}
+
+/* Autosave indicator */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.saved-indicator {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Mini player */
+.mini-player {
+  @apply flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg;
+}
+
+/* Card shadows */
+.card-shadow {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.card-shadow:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}

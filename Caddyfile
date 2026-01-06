@@ -1,0 +1,79 @@
+# Video-Creator Caddy Configuration
+# Automatic HTTPS with Let's Encrypt
+
+{$DOMAIN} {
+    # TLS configuration
+    tls {$ACME_EMAIL}
+    
+    # Security headers
+    header {
+        # Enable HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+        # XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Remove server header
+        -Server
+    }
+    
+    # API routes -> FastAPI backend
+    handle /api/* {
+        # Strip /api prefix and proxy to backend
+        uri strip_prefix /api
+        reverse_proxy api:8000 {
+            # Health checks
+            health_uri /health
+            health_interval 30s
+            
+            # Timeouts for long-running requests (TTS, render)
+            transport http {
+                response_header_timeout 300s
+                read_timeout 300s
+                write_timeout 300s
+            }
+        }
+    }
+    
+    # WebSocket support for API (if needed)
+    handle /ws/* {
+        reverse_proxy api:8000
+    }
+    
+    # Static files from data directory (exports, audio, etc.)
+    handle /files/* {
+        uri strip_prefix /files
+        reverse_proxy api:8000 {
+            # Rewrite to static file endpoint
+            header_up X-Forwarded-Prefix "/files"
+        }
+    }
+    
+    # Everything else -> Next.js frontend
+    handle {
+        reverse_proxy frontend:3000 {
+            health_uri /
+            health_interval 30s
+        }
+    }
+    
+    # Logging
+    log {
+        output file /data/access.log {
+            roll_size 100mb
+            roll_keep 5
+            roll_keep_for 720h
+        }
+        format json
+    }
+}
+
+# Redirect www to non-www
+www.{$DOMAIN} {
+    redir https://{$DOMAIN}{uri} permanent
+}
+

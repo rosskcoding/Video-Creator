@@ -1,0 +1,83 @@
+# ============================================
+# Video-Creator API - Production Dockerfile
+# ============================================
+# Multi-stage build for smaller image size
+
+# Stage 1: Build
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.txt
+
+# Stage 2: Production
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # Video processing
+    ffmpeg \
+    # Office document conversion
+    libreoffice \
+    # PDF processing
+    poppler-utils \
+    # Fonts
+    fonts-liberation \
+    fonts-dejavu-core \
+    fonts-freefont-ttf \
+    fonts-noto \
+    fonts-inter \
+    fonts-roboto \
+    fonts-open-sans \
+    fontconfig \
+    # Health check
+    curl \
+    # Cleanup
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Refresh font cache
+RUN fc-cache -f -v
+
+# Copy wheels from builder
+COPY --from=builder /app/wheels /wheels
+RUN pip install --no-cache-dir /wheels/*
+
+# Copy application code
+COPY . .
+
+# Create non-root user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Create data directory
+RUN mkdir -p /data/projects && chown -R appuser:appuser /data/projects
+
+# Set ownership
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/home/appuser/.local/bin:$PATH"
+
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command (can be overridden)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+
