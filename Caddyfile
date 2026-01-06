@@ -21,15 +21,30 @@
         -Server
     }
     
-    # API routes -> FastAPI backend
+    # Health check (backend)
+    handle /health {
+        reverse_proxy api:8000
+    }
+
+    # Static assets served by backend (slides/audio/music)
+    handle /static/* {
+        reverse_proxy api:8000 {
+            # Timeouts for long-running requests (large audio/video downloads)
+            transport http {
+                response_header_timeout 300s
+                read_timeout 300s
+                write_timeout 300s
+            }
+        }
+    }
+
+    # API routes -> FastAPI backend (KEEP /api prefix; backend routes are mounted under /api)
     handle /api/* {
-        # Strip /api prefix and proxy to backend
-        uri strip_prefix /api
         reverse_proxy api:8000 {
             # Health checks
             health_uri /health
             health_interval 30s
-            
+
             # Timeouts for long-running requests (TTS, render)
             transport http {
                 response_header_timeout 300s
@@ -42,15 +57,6 @@
     # WebSocket support for API (if needed)
     handle /ws/* {
         reverse_proxy api:8000
-    }
-    
-    # Static files from data directory (exports, audio, etc.)
-    handle /files/* {
-        uri strip_prefix /files
-        reverse_proxy api:8000 {
-            # Rewrite to static file endpoint
-            header_up X-Forwarded-Prefix "/files"
-        }
     }
     
     # Everything else -> Next.js frontend
@@ -74,6 +80,7 @@
 
 # Redirect www to non-www
 www.{$DOMAIN} {
+    tls {$ACME_EMAIL}
     redir https://{$DOMAIN}{uri} permanent
 }
 

@@ -39,7 +39,8 @@ echo ""
 
 # Update system
 log_info "Updating system packages..."
-apt-get update
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
 apt-get upgrade -y
 
 # Install dependencies
@@ -124,7 +125,11 @@ log_success "Fail2ban configured"
 # Setup automatic security updates
 log_info "Configuring automatic security updates..."
 apt-get install -y unattended-upgrades
-dpkg-reconfigure -plow unattended-upgrades
+# Non-interactive enablement (safe for curl|bash usage)
+cat > /etc/apt/apt.conf.d/20auto-upgrades << 'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
 
 # Create swap if needed (for low memory servers)
 log_info "Checking swap..."

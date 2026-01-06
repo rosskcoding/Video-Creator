@@ -85,7 +85,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:latest
           build-args: |
-            NEXT_PUBLIC_API_URL=https://${{ secrets.DOMAIN }}/api
+            # IMPORTANT: frontend code appends "/api" itself (see frontend/src/lib/api.ts)
+            NEXT_PUBLIC_API_URL=https://${{ secrets.DOMAIN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

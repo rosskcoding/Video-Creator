@@ -71,7 +71,7 @@ chmod +x deploy/*.sh
 
 ```bash
 # Скопировать пример
-cp .env.prod.example .env.prod
+cp env.prod.example .env.prod
 
 # Отредактировать с реальными значениями
 nano .env.prod
@@ -96,7 +96,7 @@ nano .env.prod
 ```
 Video-Creator/
 ├── docker-compose.prod.yml    # Production compose
-├── .env.prod.example          # Пример переменных
+├── env.prod.example           # Пример переменных
 ├── Caddyfile                  # Конфиг reverse proxy
 ├── deploy/
 │   ├── deploy.sh              # Основной скрипт деплоя
