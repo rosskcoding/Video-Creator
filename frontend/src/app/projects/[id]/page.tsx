@@ -283,8 +283,11 @@ export default function ProjectEditorPage() {
       const version = versions.find((v) => v.id === versionId);
       if (version?.status === "ready") {
         toast.success("Slides ready!");
-        queryClient.invalidateQueries({ queryKey: ["versions", projectId] });
-        queryClient.invalidateQueries({ queryKey: ["slides", projectId] });
+        // Invalidate versions first, then slides with correct version ID
+        await queryClient.invalidateQueries({ queryKey: ["versions", projectId] });
+        await queryClient.invalidateQueries({ queryKey: ["slides", projectId, versionId] });
+        // Also refetch to ensure UI updates immediately
+        await queryClient.refetchQueries({ queryKey: ["versions", projectId] });
       } else if (version?.status === "failed") {
         // Try to show a more specific error (e.g. unsupported aspect ratio)
         if (taskId) {
@@ -317,24 +320,59 @@ export default function ProjectEditorPage() {
     },
   });
 
+  // Track pending save for cleanup
+  const pendingSaveRef = useRef<{ slideId: string; lang: string; text: string } | null>(null);
+
+  // Save pending changes immediately (used when switching slides/languages)
+  const flushPendingSave = useCallback(() => {
+    if (pendingSaveRef.current) {
+      const { slideId, lang, text } = pendingSaveRef.current;
+      api.updateScript(slideId, lang, text).catch(console.error);
+      pendingSaveRef.current = null;
+      setIsSaved(true);
+    }
+  }, []);
+
+  // Save before switching slides
+  useEffect(() => {
+    // When selectedSlideId changes, flush any pending save for the previous slide
+    return () => {
+      flushPendingSave();
+    };
+  }, [selectedSlideId, flushPendingSave]);
+
+  // Save before switching languages
+  useEffect(() => {
+    return () => {
+      flushPendingSave();
+    };
+  }, [selectedLang, flushPendingSave]);
+
   // Autosave with debounce
   useEffect(() => {
     if (!selectedSlideId) return;
 
     const script = selectedSlide?.scripts.find((s) => s.lang === selectedLang);
-    if (script?.text === scriptText) return;
+    if (script?.text === scriptText) {
+      pendingSaveRef.current = null;
+      return;
+    }
 
     setIsSaved(false);
+    // Track pending save so it can be flushed if user switches slides
+    pendingSaveRef.current = { slideId: selectedSlideId, lang: selectedLang, text: scriptText };
+
     const timer = setTimeout(() => {
       updateScriptMutation.mutate({
         slideId: selectedSlideId,
         lang: selectedLang,
         text: scriptText,
       });
-    }, 1500);
+      pendingSaveRef.current = null;
+    }, 1000); // Reduced to 1 second for better UX
 
     return () => clearTimeout(timer);
-  }, [scriptText]);
+  }, [scriptText, selectedSlideId, selectedLang]);
 
   const addLanguageMutation = useMutation({
     mutationFn: (lang: string) => api.addLanguage(projectId, currentVersion!.id, lang),

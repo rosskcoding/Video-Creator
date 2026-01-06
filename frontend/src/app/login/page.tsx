@@ -1,107 +1,40 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Lock, User, AlertCircle, RefreshCw, Calculator } from "lucide-react";
-
-type Captcha = { question: string; answer: number };
-
-// Generate simple math captcha
-function generateCaptcha(): Captcha {
-  const ops = ["+", "-", "×"] as const;
-  const op = ops[Math.floor(Math.random() * ops.length)];
-  let a: number, b: number, answer: number;
-
-  switch (op) {
-    case "+":
-      a = Math.floor(Math.random() * 20) + 1;
-      b = Math.floor(Math.random() * 20) + 1;
-      answer = a + b;
-      break;
-    case "-":
-      a = Math.floor(Math.random() * 20) + 10;
-      b = Math.floor(Math.random() * a);
-      answer = a - b;
-      break;
-    case "×":
-      a = Math.floor(Math.random() * 10) + 1;
-      b = Math.floor(Math.random() * 10) + 1;
-      answer = a * b;
-      break;
-  }
-
-  return { question: `${a} ${op} ${b} = ?`, answer };
-}
-
-// Cache captcha to stay stable across React Strict Mode remounts in dev.
-let cachedCaptcha: Captcha | null = null;
-
-function getOrCreateCaptcha(): Captcha {
-  if (cachedCaptcha) return cachedCaptcha;
-  cachedCaptcha = generateCaptcha();
-  return cachedCaptcha;
-}
-
-function regenerateCaptcha(): Captcha {
-  cachedCaptcha = generateCaptcha();
-  return cachedCaptcha;
-}
+import { Lock, User, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [captchaAnswer, setCaptchaAnswer] = useState("");
-  const [captcha, setCaptcha] = useState<Captcha | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Generate captcha on mount (stable even under React Strict Mode remounts)
-  useEffect(() => {
-    setCaptcha(getOrCreateCaptcha());
-  }, []);
-
-  const refreshCaptcha = useCallback(() => {
-    setCaptcha(regenerateCaptcha());
-    setCaptchaAnswer("");
-  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
-    // Verify captcha first
-    const answerNum = Number(captchaAnswer);
-    if (!captcha || !Number.isFinite(answerNum) || answerNum !== captcha.answer) {
-      setError("Wrong answer. Try again!");
-      refreshCaptcha();
-      return;
-    }
-
     setLoading(true);
 
     try {
-      // Use the new secure login function (sets httpOnly cookies)
       const result = await login(username, password);
 
       if (result.success) {
         router.push("/");
       } else {
         setError(result.error || "Invalid username or password");
-        refreshCaptcha();
       }
     } catch (err) {
       setError("Cannot connect to server");
-      refreshCaptcha();
     } finally {
       setLoading(false);
     }
   };
 
-  const isFormValid = Boolean(username && password && captcha && captchaAnswer);
+  const isFormValid = Boolean(username && password);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -158,37 +91,6 @@ export default function LoginPage() {
                   required
                 />
               </div>
-            </div>
-
-            {/* Math Captcha */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Security Check
-              </label>
-              <div className="flex gap-3 items-center">
-                <div className="flex-1 flex items-center gap-2 px-4 py-2.5 bg-slate-900/80 border border-slate-600 rounded-lg">
-                  <Calculator className="w-5 h-5 text-violet-400" />
-                  <span className="text-lg font-mono text-white tracking-wide">
-                    {captcha?.question || "..."}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={refreshCaptcha}
-                  className="p-2.5 text-slate-400 hover:text-violet-400 hover:bg-slate-700/50 rounded-lg transition-colors"
-                  title="New question"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                </button>
-              </div>
-              <Input
-                type="number"
-                value={captchaAnswer}
-                onChange={(e) => setCaptchaAnswer(e.target.value)}
-                placeholder="Your answer"
-                className="mt-2 bg-slate-900/50 border-slate-600 focus:border-violet-500 text-white placeholder:text-slate-500 text-center text-lg font-mono"
-                required
-              />
             </div>
           </div>
 

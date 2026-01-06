@@ -56,10 +56,15 @@ RUN pip install --no-cache-dir /wheels/*
 COPY . .
 
 # Create non-root user for security
-RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN groupadd -r appuser && useradd -r -g appuser -m appuser
 
 # Create data directory
 RUN mkdir -p /data/projects && chown -R appuser:appuser /data/projects
+
+# Create LibreOffice cache directories (needed for headless conversion)
+RUN mkdir -p /home/appuser/.cache/dconf \
+    && mkdir -p /home/appuser/.config/libreoffice \
+    && chown -R appuser:appuser /home/appuser
 
 # Set ownership
 RUN chown -R appuser:appuser /app
