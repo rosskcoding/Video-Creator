@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, X, Maximize2, Minimize2 } from "lucide-react";
-import { SlideWithScripts, api } from "@/lib/api";
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, X, Maximize2, Minimize2, Loader2 } from "lucide-react";
+import { SlideWithScripts } from "@/lib/api";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface PreviewPlayerProps {
   slides: SlideWithScripts[];
@@ -19,6 +21,7 @@ interface TimelineItem {
   audioUrl: string | null;
   duration: number; // seconds
   startTime: number; // cumulative start time
+  audioElement?: HTMLAudioElement | null;
 }
 
 export function PreviewPlayer({
@@ -34,12 +37,22 @@ export function PreviewPlayer({
   const [isMuted, setIsMuted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentSlideIdx, setCurrentSlideIdx] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadProgress, setLoadProgress] = useState(0);
+  const [preloadedAudio, setPreloadedAudio] = useState<Map<number, HTMLAudioElement>>(new Map());
   
-  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+  const currentVoiceRef = useRef<HTMLAudioElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const playStartTimeRef = useRef<number>(0);
   const playStartPositionRef = useRef<number>(0);
+
+  // Build URL helper
+  const getFullUrl = (url: string) => {
+    if (!url) return "";
+    if (url.startsWith("http")) return url;
+    return `${API_URL}${url}`;
+  };
 
   // Build timeline from slides (memoized)
   const timeline = useMemo(() => {
@@ -50,16 +63,12 @@ export function PreviewPlayer({
     
     for (const slide of sortedSlides) {
       const audio = slide.audio_files?.find(a => a.lang === lang);
-      const duration = audio?.duration_sec || 3; // Default 3 sec for slides without audio
-      
-      // Convert relative URLs to full URLs
-      const imageUrl = api.getSlideImageUrl(slide.image_url);
-      const audioUrl = audio?.audio_url ? `${api.getSlideImageUrl(audio.audio_url).replace('/static/slides/', '/static/audio/')}` : null;
+      const duration = audio?.duration_sec || 3;
       
       items.push({
         slideIndex: slide.slide_index,
-        imageUrl,
-        audioUrl: audio?.audio_url ? api.getSlideImageUrl(audio.audio_url) : null,
+        imageUrl: getFullUrl(slide.image_url),
+        audioUrl: audio?.audio_url ? getFullUrl(audio.audio_url) : null,
         duration,
         startTime: cumulativeTime,
       });
@@ -76,6 +85,82 @@ export function PreviewPlayer({
 
   const currentSlide = timeline[currentSlideIdx];
 
+  // Preload all audio files
+  useEffect(() => {
+    setIsLoading(true);
+    setLoadProgress(0);
+    
+    const audioItems = timeline.filter(t => t.audioUrl);
+    const totalToLoad = audioItems.length + (musicUrl ? 1 : 0);
+    
+    if (totalToLoad === 0) {
+      setIsLoading(false);
+      return;
+    }
+    
+    let loaded = 0;
+    const audioMap = new Map<number, HTMLAudioElement>();
+    
+    const onLoad = () => {
+      loaded++;
+      setLoadProgress(Math.round((loaded / totalToLoad) * 100));
+      if (loaded >= totalToLoad) {
+        setPreloadedAudio(audioMap);
+        setIsLoading(false);
+      }
+    };
+    
+    const onError = (url: string) => {
+      console.error("Failed to load audio:", url);
+      loaded++;
+      setLoadProgress(Math.round((loaded / totalToLoad) * 100));
+      if (loaded >= totalToLoad) {
+        setPreloadedAudio(audioMap);
+        setIsLoading(false);
+      }
+    };
+    
+    // Preload voice audio
+    timeline.forEach((item, idx) => {
+      if (item.audioUrl) {
+        const audio = new Audio();
+        audio.preload = "auto";
+        audio.oncanplaythrough = onLoad;
+        audio.onerror = () => onError(item.audioUrl!);
+        audio.src = item.audioUrl;
+        audioMap.set(idx, audio);
+      }
+    });
+    
+    // Preload music
+    if (musicUrl) {
+      const music = new Audio();
+      music.preload = "auto";
+      music.loop = true;
+      music.oncanplaythrough = onLoad;
+      music.onerror = () => onError(musicUrl);
+      music.src = musicUrl;
+      musicAudioRef.current = music;
+    }
+    
+    // Timeout fallback - start anyway after 5 seconds
+    const timeout = setTimeout(() => {
+      if (loaded < totalToLoad) {
+        console.warn("Audio preload timeout, starting anyway");
+        setPreloadedAudio(audioMap);
+        setIsLoading(false);
+      }
+    }, 5000);
+    
+    return () => {
+      clearTimeout(timeout);
+      audioMap.forEach(audio => {
+        audio.pause();
+        audio.src = "";
+      });
+    };
+  }, [timeline, musicUrl]);
+
   // Find slide index for a given time
   const getSlideIndexForTime = useCallback((time: number): number => {
     for (let i = timeline.length - 1; i >= 0; i--) {
@@ -88,9 +173,9 @@ export function PreviewPlayer({
 
   // Stop all audio
   const stopAllAudio = useCallback(() => {
-    if (voiceAudioRef.current) {
-      voiceAudioRef.current.pause();
-      voiceAudioRef.current.src = "";
+    if (currentVoiceRef.current) {
+      currentVoiceRef.current.pause();
+      currentVoiceRef.current.currentTime = 0;
     }
     if (musicAudioRef.current) {
       musicAudioRef.current.pause();
@@ -99,25 +184,21 @@ export function PreviewPlayer({
 
   // Play voice audio for a slide
   const playVoiceForSlide = useCallback((slideIdx: number, seekOffset: number = 0) => {
-    const slide = timeline[slideIdx];
-    if (!slide?.audioUrl) return;
-
-    // Create new audio element for each play to avoid issues
-    if (voiceAudioRef.current) {
-      voiceAudioRef.current.pause();
-      voiceAudioRef.current.src = "";
+    // Stop current voice
+    if (currentVoiceRef.current) {
+      currentVoiceRef.current.pause();
+      currentVoiceRef.current.currentTime = 0;
     }
     
-    const audio = new Audio(slide.audioUrl);
+    const audio = preloadedAudio.get(slideIdx);
+    if (!audio) return;
+    
     audio.volume = isMuted ? 0 : (voiceVolume / 100);
+    audio.currentTime = seekOffset;
+    currentVoiceRef.current = audio;
     
-    if (seekOffset > 0 && seekOffset < slide.duration) {
-      audio.currentTime = seekOffset;
-    }
-    
-    voiceAudioRef.current = audio;
-    audio.play().catch(err => console.log("Voice play failed:", err));
-  }, [timeline, isMuted, voiceVolume]);
+    audio.play().catch(err => console.log("Voice play error:", err));
+  }, [preloadedAudio, isMuted, voiceVolume]);
 
   // Animation loop for smooth playback
   const updatePlayback = useCallback(() => {
@@ -132,7 +213,6 @@ export function PreviewPlayer({
     const newSlideIdx = getSlideIndexForTime(newTime);
     setCurrentSlideIdx(prev => {
       if (prev !== newSlideIdx) {
-        // New slide - play its audio
         playVoiceForSlide(newSlideIdx);
         return newSlideIdx;
       }
@@ -151,7 +231,7 @@ export function PreviewPlayer({
 
   // Start/stop playback
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying && !isLoading) {
       playStartTimeRef.current = performance.now();
       playStartPositionRef.current = currentTime;
       
@@ -162,10 +242,10 @@ export function PreviewPlayer({
       playVoiceForSlide(slideIdx, offsetInSlide);
       
       // Start music
-      if (musicUrl && musicAudioRef.current) {
-        musicAudioRef.current.currentTime = currentTime % (musicAudioRef.current.duration || 1);
+      if (musicAudioRef.current) {
+        musicAudioRef.current.currentTime = currentTime % (musicAudioRef.current.duration || 60);
         musicAudioRef.current.volume = isMuted ? 0 : (musicVolume / 100);
-        musicAudioRef.current.play().catch(err => console.log("Music play failed:", err));
+        musicAudioRef.current.play().catch(err => console.log("Music play error:", err));
       }
       
       // Start animation loop
@@ -176,7 +256,9 @@ export function PreviewPlayer({
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
-      stopAllAudio();
+      if (!isPlaying) {
+        stopAllAudio();
+      }
     }
 
     return () => {
@@ -184,32 +266,28 @@ export function PreviewPlayer({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPlaying]);
-
-  // Initialize music audio element
-  useEffect(() => {
-    if (musicUrl) {
-      const audio = new Audio(musicUrl);
-      audio.loop = true;
-      audio.volume = musicVolume / 100;
-      audio.preload = "auto";
-      musicAudioRef.current = audio;
-    }
-    
-    return () => {
-      stopAllAudio();
-    };
-  }, [musicUrl]);
+  }, [isPlaying, isLoading]);
 
   // Update volumes
   useEffect(() => {
-    if (voiceAudioRef.current) {
-      voiceAudioRef.current.volume = isMuted ? 0 : (voiceVolume / 100);
+    if (currentVoiceRef.current) {
+      currentVoiceRef.current.volume = isMuted ? 0 : (voiceVolume / 100);
     }
     if (musicAudioRef.current) {
       musicAudioRef.current.volume = isMuted ? 0 : (musicVolume / 100);
     }
   }, [isMuted, voiceVolume, musicVolume]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopAllAudio();
+      preloadedAudio.forEach(audio => {
+        audio.pause();
+        audio.src = "";
+      });
+    };
+  }, []);
 
   // Seek to position
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -228,7 +306,7 @@ export function PreviewPlayer({
       playVoiceForSlide(newSlideIdx, offsetInSlide);
       
       if (musicAudioRef.current) {
-        musicAudioRef.current.currentTime = newTime % (musicAudioRef.current.duration || 1);
+        musicAudioRef.current.currentTime = newTime % (musicAudioRef.current.duration || 60);
       }
     }
   };
@@ -255,7 +333,7 @@ export function PreviewPlayer({
     
     if (isPlaying) {
       playStartTimeRef.current = performance.now();
-      playStartPositionRef.current = newTime;
+      playStartPositionRef.current = nextIdx;
       playVoiceForSlide(nextIdx);
     }
   };
@@ -267,12 +345,17 @@ export function PreviewPlayer({
   };
 
   const togglePlay = () => {
+    if (isLoading) return;
+    
     if (currentTime >= totalDuration) {
       setCurrentTime(0);
       setCurrentSlideIdx(0);
     }
     setIsPlaying(!isPlaying);
   };
+
+  // Count audio slides
+  const audioCount = timeline.filter(t => t.audioUrl).length;
 
   return (
     <div className={`
@@ -282,9 +365,16 @@ export function PreviewPlayer({
     `}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b border-border shrink-0">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Preview ({lang.toUpperCase()})
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Preview ({lang.toUpperCase()})
+          </span>
+          {audioCount > 0 && (
+            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+              {audioCount} audio
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -308,6 +398,14 @@ export function PreviewPlayer({
         relative bg-black flex items-center justify-center flex-1
         ${isExpanded ? "" : "aspect-video"}
       `}>
+        {/* Loading overlay */}
+        {isLoading && (
+          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-10">
+            <Loader2 className="w-8 h-8 text-primary animate-spin mb-2" />
+            <span className="text-white text-sm">Loading audio... {loadProgress}%</span>
+          </div>
+        )}
+        
         {currentSlide && (
           <img
             src={currentSlide.imageUrl}
@@ -316,15 +414,16 @@ export function PreviewPlayer({
             key={currentSlide.slideIndex}
           />
         )}
+        
         {/* Slide counter */}
         <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
           {currentSlideIdx + 1} / {timeline.length}
         </div>
+        
         {/* Audio indicator */}
         {currentSlide?.audioUrl && (
-          <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+          <div className="absolute bottom-2 left-2 bg-green-600/80 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
             <Volume2 className="w-3 h-3" />
-            <span>Audio</span>
           </div>
         )}
       </div>
@@ -343,7 +442,8 @@ export function PreviewPlayer({
             step={0.1}
             value={currentTime}
             onChange={handleSeek}
-            className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer
+            disabled={isLoading}
+            className="flex-1 h-1.5 bg-muted rounded-full appearance-none cursor-pointer disabled:opacity-50
               [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
               [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full
               [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:cursor-pointer"
@@ -357,7 +457,8 @@ export function PreviewPlayer({
         <div className="flex items-center justify-center gap-2">
           <button
             onClick={skipToPrevSlide}
-            className="p-2 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            disabled={isLoading}
+            className="p-2 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground disabled:opacity-50"
             title="Previous slide"
           >
             <SkipBack className="w-4 h-4" />
@@ -365,15 +466,23 @@ export function PreviewPlayer({
           
           <button
             onClick={togglePlay}
-            className="p-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-md"
+            disabled={isLoading}
+            className="p-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-md disabled:opacity-50"
             title={isPlaying ? "Pause" : "Play"}
           >
-            {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+            {isLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : isPlaying ? (
+              <Pause className="w-5 h-5" />
+            ) : (
+              <Play className="w-5 h-5 ml-0.5" />
+            )}
           </button>
           
           <button
             onClick={skipToNextSlide}
-            className="p-2 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            disabled={isLoading}
+            className="p-2 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground disabled:opacity-50"
             title="Next slide"
           >
             <SkipForward className="w-4 h-4" />
