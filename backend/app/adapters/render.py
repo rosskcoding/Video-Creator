@@ -383,14 +383,16 @@ class RenderAdapter:
     
     async def build_voice_timeline(
         self,
-        audio_files: List[Tuple[Path, float, float]],  # [(path, pre_pad, post_pad), ...]
+        audio_files: List[Tuple[Optional[Path], float, float]],  # [(path_or_none, pre_pad, post_pad), ...]
         output_path: Path,
     ) -> Path:
         """
         Build voice timeline by concatenating audio files with padding.
+        Supports None path for silent segments (slides without audio).
         
         Args:
-            audio_files: List of (audio_path, pre_padding_sec, post_padding_sec)
+            audio_files: List of (audio_path_or_none, pre_padding_sec, post_padding_sec)
+                        If path is None, creates silence for (pre_pad + post_pad) duration
             output_path: Path for output timeline WAV
             
         Returns:
@@ -402,17 +404,29 @@ class RenderAdapter:
         # Build filter for padding and concatenation
         inputs = []
         filter_parts = []
+        input_idx = 0
+        segment_labels = []
         
         for i, (audio_path, pre_pad, post_pad) in enumerate(audio_files):
-            inputs.extend(["-i", str(audio_path)])
-            # Add silence padding
-            filter_parts.append(
-                f"[{i}:a]adelay={int(pre_pad * 1000)}|{int(pre_pad * 1000)},"
-                f"apad=pad_dur={post_pad}[a{i}]"
-            )
+            if audio_path is not None:
+                # Real audio file with padding
+                inputs.extend(["-i", str(audio_path)])
+                filter_parts.append(
+                    f"[{input_idx}:a]adelay={int(pre_pad * 1000)}|{int(pre_pad * 1000)},"
+                    f"apad=pad_dur={post_pad}[a{i}]"
+                )
+                input_idx += 1
+            else:
+                # Silent segment (slide without audio)
+                # Generate silence using anullsrc
+                silence_duration = pre_pad + post_pad  # pre_pad=0, post_pad=duration for silent slides
+                filter_parts.append(
+                    f"anullsrc=r=44100:cl=stereo,atrim=0:{silence_duration}[a{i}]"
+                )
+            segment_labels.append(f"[a{i}]")
         
-        # Concat all
-        concat_inputs = "".join(f"[a{i}]" for i in range(len(audio_files)))
+        # Concat all segments
+        concat_inputs = "".join(segment_labels)
         filter_parts.append(f"{concat_inputs}concat=n={len(audio_files)}:v=0:a=1[out]")
         
         filter_complex = ";".join(filter_parts)

@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, FolderOpen, Languages, Image, Clock, AlertCircle, WifiOff, RefreshCw } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus, Search, FolderOpen, Languages, Image, Clock, AlertCircle, WifiOff, RefreshCw, Trash2, MoreVertical } from "lucide-react";
 import { api, Project, isAuthenticated } from "@/lib/api";
 import { Button, Input, Badge, Card } from "@/components/ui";
 import { CreateProjectModal } from "@/components/CreateProjectModal";
+import { toast } from "sonner";
 import Link from "next/link";
 
 export default function ProjectsPage() {
@@ -123,6 +124,35 @@ export default function ProjectsPage() {
 }
 
 function ProjectCard({ project }: { project: Project }) {
+  const queryClient = useQueryClient();
+  const [showMenu, setShowMenu] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteProject(project.id),
+    onSuccess: () => {
+      toast.success(`Project "${project.name}" deleted`);
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: () => {
+      toast.error("Failed to delete project");
+    },
+  });
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (confirmDelete) {
+      deleteMutation.mutate();
+      setConfirmDelete(false);
+      setShowMenu(false);
+    } else {
+      setConfirmDelete(true);
+      // Reset confirm after 3 seconds
+      setTimeout(() => setConfirmDelete(false), 3000);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "ready":
@@ -139,42 +169,76 @@ function ProjectCard({ project }: { project: Project }) {
   };
 
   return (
-    <Link href={`/projects/${project.id}`}>
-      <Card className="p-4 hover:shadow-card-hover hover:border-primary/30 transition-all duration-200 cursor-pointer group">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Image className="w-5 h-5 text-primary" />
+    <div className="relative">
+      <Link href={`/projects/${project.id}`}>
+        <Card className="p-4 hover:shadow-card-hover hover:border-primary/30 transition-all duration-200 cursor-pointer group">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Image className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-medium text-[14px] group-hover:text-primary transition-colors">
+                  {project.name}
+                </h3>
+                <p className="text-label text-muted-foreground">
+                  Base: {project.base_language.toUpperCase()}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-medium text-[14px] group-hover:text-primary transition-colors">
-                {project.name}
-              </h3>
-              <p className="text-label text-muted-foreground">
-                Base: {project.base_language.toUpperCase()}
-              </p>
+            <div className="flex items-center gap-2">
+              {getStatusBadge(project.status)}
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowMenu(!showMenu);
+                }}
+                className="p-1 rounded hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <MoreVertical className="w-4 h-4 text-muted-foreground" />
+              </button>
             </div>
           </div>
-          {getStatusBadge(project.status)}
-        </div>
 
-        <div className="flex items-center gap-4 text-label text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <Image className="w-3.5 h-3.5" />
-            {project.slide_count} slides
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Languages className="w-3.5 h-3.5" />
-            {project.language_count} {project.language_count === 1 ? "language" : "languages"}
-          </span>
-        </div>
+          <div className="flex items-center gap-4 text-label text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Image className="w-3.5 h-3.5" />
+              {project.slide_count} slides
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Languages className="w-3.5 h-3.5" />
+              {project.language_count} {project.language_count === 1 ? "language" : "languages"}
+            </span>
+          </div>
 
-        <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-border text-label text-muted-foreground">
-          <Clock className="w-3.5 h-3.5" />
-          <span>Updated {formatRelativeTime(project.updated_at)}</span>
-        </div>
-      </Card>
-    </Link>
+          <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-border text-label text-muted-foreground">
+            <Clock className="w-3.5 h-3.5" />
+            <span>Updated {formatRelativeTime(project.updated_at)}</span>
+          </div>
+        </Card>
+      </Link>
+
+      {/* Delete menu */}
+      {showMenu && (
+        <>
+          <div 
+            className="fixed inset-0 z-10" 
+            onClick={() => { setShowMenu(false); setConfirmDelete(false); }}
+          />
+          <div className="absolute right-2 top-12 z-20 bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[140px]">
+            <button
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+              className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-muted text-destructive"
+            >
+              <Trash2 className="w-4 h-4" />
+              {deleteMutation.isPending ? "Deleting..." : confirmDelete ? "Click to confirm" : "Delete project"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

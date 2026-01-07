@@ -538,61 +538,70 @@ async def _render_language_async(task, project_id: str, version_id: str, lang: s
             timelines_dir.mkdir(parents=True, exist_ok=True)
             exports_dir.mkdir(parents=True, exist_ok=True)
             
-            # First pass: collect valid slides with existing audio files
-            valid_slides_data = []  # [(slide, audio, script, audio_file_path), ...]
+            # Minimum duration for slides without audio
+            MIN_FIRST_SLIDE_DURATION = 5.0  # First slide shows for at least 5 seconds
+            MIN_SLIDE_DURATION = 3.0  # Other slides show for at least 3 seconds
+            
+            # Process ALL slides, including those without audio
+            all_slides_data = []  # [(slide, audio_or_none, script_or_none, audio_file_path_or_none), ...]
             
             for slide in slides:
                 audio = next((a for a in slide.audio_files if a.lang == lang), None)
                 script = next((s for s in slide.scripts if s.lang == lang), None)
+                audio_file_path = None
                 
-                if not audio:
-                    continue
+                if audio:
+                    # Validate audio file exists on disk
+                    audio_file_path = to_absolute_path(audio.audio_path)
+                    if not audio_file_path.exists():
+                        # Stale DB record - audio file was deleted
+                        await db.delete(audio)
+                        await db.flush()
+                        audio = None
+                        audio_file_path = None
                 
-                # Validate audio file exists on disk
-                audio_file_path = to_absolute_path(audio.audio_path)
-                if not audio_file_path.exists():
-                    # Stale DB record - audio file was deleted (e.g. after re-uploading PPTX)
-                    # Clean up the orphaned record
-                    await db.delete(audio)
-                    await db.flush()
-                    continue
-                
-                valid_slides_data.append((slide, audio, script, audio_file_path))
+                all_slides_data.append((slide, audio, script, audio_file_path))
             
-            # Check if we have any valid audio to render
-            if not valid_slides_data:
-                raise ValueError(
-                    f"No audio files found for language '{lang}'. "
-                    f"Please generate audio (TTS) for this language before rendering."
-                )
+            # Check if we have at least one slide
+            if not all_slides_data:
+                raise ValueError(f"No slides found for version '{version_id}'.")
             
             # Build voice timeline
             audio_files = []
             slide_data = []
             subtitles = []
             current_time = 0.0
-            num_valid = len(valid_slides_data)
+            num_slides = len(all_slides_data)
             
-            for idx, (slide, audio, script, audio_file_path) in enumerate(valid_slides_data):
-                # Determine if this is first/last slide with audio
+            for idx, (slide, audio, script, audio_file_path) in enumerate(all_slides_data):
+                # Determine if this is first/last slide
                 is_first = idx == 0
-                is_last = idx == num_valid - 1
+                is_last = idx == num_slides - 1
                 
-                pre_pad = first_hold if is_first else pre_padding
-                post_pad = last_hold if is_last else post_padding
+                if audio and audio_file_path:
+                    # Slide has audio - use normal duration calculation
+                    pre_pad = first_hold if is_first else pre_padding
+                    post_pad = last_hold if is_last else post_padding
+                    
+                    audio_files.append((audio_file_path, pre_pad, post_pad))
+                    
+                    # Calculate duration
+                    duration = pre_pad + audio.duration_sec + post_pad
+                    
+                    # Build subtitle entry
+                    if script and script.text:
+                        subtitle_start = current_time + pre_pad
+                        subtitle_end = current_time + pre_pad + audio.duration_sec
+                        subtitles.append((subtitle_start, subtitle_end, script.text))
+                else:
+                    # Slide has no audio - use minimum duration (silence)
+                    min_duration = MIN_FIRST_SLIDE_DURATION if is_first else MIN_SLIDE_DURATION
+                    duration = min_duration
+                    # No audio file to add, but we need to account for silence
+                    # We'll add a silent gap in the voice timeline
+                    audio_files.append((None, 0.0, duration))  # None path signals silence
                 
-                audio_files.append((audio_file_path, pre_pad, post_pad))
-                
-                # Calculate duration
-                duration = pre_pad + audio.duration_sec + post_pad
                 slide_data.append((to_absolute_path(slide.image_path), duration))
-                
-                # Build subtitle entry
-                if script and script.text:
-                    subtitle_start = current_time + pre_pad
-                    subtitle_end = current_time + pre_pad + audio.duration_sec
-                    subtitles.append((subtitle_start, subtitle_end, script.text))
-                
                 current_time += duration
             
             job.progress_pct = 20
