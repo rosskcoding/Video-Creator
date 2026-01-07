@@ -1407,11 +1407,31 @@ function SlideThumb({
         </div>
       </div>
 
-      {/* Dropdown menu */}
+      {/* Dropdown menu - using fixed positioning to avoid overflow clipping */}
       {showMenu && (
         <>
-          <div className="fixed inset-0 z-40" onClick={onMenuToggle} />
-          <div className="absolute left-0 top-full mt-1 w-36 bg-surface border border-border rounded-lg shadow-dropdown z-50 py-1">
+          <div className="fixed inset-0 z-[100]" onClick={onMenuToggle} />
+          <div className="fixed z-[101] w-36 bg-surface border border-border rounded-lg shadow-dropdown py-1"
+               style={{
+                 top: 'auto',
+                 bottom: 'auto',
+                 left: '1rem',
+               }}
+               ref={(el) => {
+                 if (el) {
+                   const rect = el.parentElement?.getBoundingClientRect();
+                   if (rect) {
+                     el.style.left = `${rect.left}px`;
+                     // Position above if near bottom of viewport
+                     if (rect.bottom + 50 > window.innerHeight) {
+                       el.style.top = `${rect.top - el.offsetHeight - 4}px`;
+                     } else {
+                       el.style.top = `${rect.bottom + 4}px`;
+                     }
+                   }
+                 }
+               }}
+          >
             <button
               onClick={(e) => {
                 e.stopPropagation();
