@@ -12,6 +12,9 @@ from elevenlabs.client import ElevenLabs
 
 from app.core.config import settings
 
+# HARDCODED VOICE - always use this voice, ignore any other settings
+HARDCODED_VOICE_ID = "iBcRJa9DRdlJlVihC0V6"
+
 
 class TTSAdapter:
     """Adapter for ElevenLabs Text-to-Speech"""
@@ -19,12 +22,12 @@ class TTSAdapter:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        voice_id: Optional[str] = None,
+        voice_id: Optional[str] = None,  # IGNORED - using hardcoded voice
         model: Optional[str] = None,
         timeout_sec: Optional[int] = None,
     ):
         self.api_key = api_key or settings.ELEVENLABS_API_KEY
-        self.voice_id = voice_id or settings.DEFAULT_VOICE_ID
+        self.voice_id = HARDCODED_VOICE_ID  # ALWAYS use hardcoded voice
         self.model = model or settings.DEFAULT_TTS_MODEL
         self.timeout_sec = timeout_sec or settings.TTS_HTTP_TIMEOUT_SEC
         
@@ -37,7 +40,7 @@ class TTSAdapter:
     @staticmethod
     def compute_audio_hash(
         text: str,
-        voice_id: str,
+        voice_id: str,  # IGNORED - using hardcoded voice
         lang: str,
         model: str = "eleven_flash_v2_5",
         params_version: str = "v1"
@@ -46,14 +49,15 @@ class TTSAdapter:
         Compute cache key for TTS audio.
         Hash = sha256(lang + voice_id + text + model + params_version)
         """
-        content = f"{lang}|{voice_id}|{text}|{model}|{params_version}"
+        # ALWAYS use hardcoded voice for hash
+        content = f"{lang}|{HARDCODED_VOICE_ID}|{text}|{model}|{params_version}"
         return hashlib.sha256(content.encode()).hexdigest()
     
     async def generate_speech(
         self,
         text: str,
         output_path: Path,
-        voice_id: Optional[str] = None,
+        voice_id: Optional[str] = None,  # IGNORED - using hardcoded voice
         model: Optional[str] = None,
     ) -> float:
         """
@@ -62,15 +66,14 @@ class TTSAdapter:
         Args:
             text: Text to convert to speech
             output_path: Path to save the audio file (WAV preferred)
-            voice_id: ElevenLabs voice ID
+            voice_id: IGNORED - always uses hardcoded voice
             model: TTS model ID
-            stability: Voice stability (0-1)
-            similarity_boost: Voice similarity boost (0-1)
             
         Returns:
             Duration of generated audio in seconds
         """
-        voice_id = voice_id or self.voice_id
+        # ALWAYS use hardcoded voice, ignore parameter
+        voice_id = HARDCODED_VOICE_ID
         model = model or self.model
         
         # Ensure output directory exists
