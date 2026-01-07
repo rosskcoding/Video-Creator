@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, X, Maximize2, Minimize2 } from "lucide-react";
-import { SlideWithScripts } from "@/lib/api";
+import { SlideWithScripts, api } from "@/lib/api";
 
 interface PreviewPlayerProps {
   slides: SlideWithScripts[];
@@ -33,37 +33,51 @@ export function PreviewPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [currentSlideIdx, setCurrentSlideIdx] = useState(0);
   
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const musicAudioRef = useRef<HTMLAudioElement | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const currentSlideIndexRef = useRef(0);
+  const animationFrameRef = useRef<number | null>(null);
+  const playStartTimeRef = useRef<number>(0);
+  const playStartPositionRef = useRef<number>(0);
 
-  // Build timeline from slides
-  const timeline: TimelineItem[] = [];
-  let cumulativeTime = 0;
-  
-  const sortedSlides = [...slides].sort((a, b) => a.slide_index - b.slide_index);
-  
-  for (const slide of sortedSlides) {
-    const audio = slide.audio_files?.find(a => a.lang === lang);
-    const duration = audio?.duration_sec || 3; // Default 3 sec for slides without audio
+  // Build timeline from slides (memoized)
+  const timeline = useMemo(() => {
+    const items: TimelineItem[] = [];
+    let cumulativeTime = 0;
     
-    timeline.push({
-      slideIndex: slide.slide_index,
-      imageUrl: slide.image_url,
-      audioUrl: audio?.audio_url || null,
-      duration,
-      startTime: cumulativeTime,
-    });
+    const sortedSlides = [...slides].sort((a, b) => a.slide_index - b.slide_index);
     
-    cumulativeTime += duration;
-  }
+    for (const slide of sortedSlides) {
+      const audio = slide.audio_files?.find(a => a.lang === lang);
+      const duration = audio?.duration_sec || 3; // Default 3 sec for slides without audio
+      
+      // Convert relative URLs to full URLs
+      const imageUrl = api.getSlideImageUrl(slide.image_url);
+      const audioUrl = audio?.audio_url ? `${api.getSlideImageUrl(audio.audio_url).replace('/static/slides/', '/static/audio/')}` : null;
+      
+      items.push({
+        slideIndex: slide.slide_index,
+        imageUrl,
+        audioUrl: audio?.audio_url ? api.getSlideImageUrl(audio.audio_url) : null,
+        duration,
+        startTime: cumulativeTime,
+      });
+      
+      cumulativeTime += duration;
+    }
+    
+    return items;
+  }, [slides, lang]);
 
-  const totalDuration = cumulativeTime;
+  const totalDuration = useMemo(() => {
+    return timeline.reduce((acc, item) => acc + item.duration, 0);
+  }, [timeline]);
 
-  // Find current slide based on currentTime
-  const getCurrentSlideIndex = useCallback((time: number): number => {
+  const currentSlide = timeline[currentSlideIdx];
+
+  // Find slide index for a given time
+  const getSlideIndexForTime = useCallback((time: number): number => {
     for (let i = timeline.length - 1; i >= 0; i--) {
       if (time >= timeline[i].startTime) {
         return i;
@@ -72,85 +86,122 @@ export function PreviewPlayer({
     return 0;
   }, [timeline]);
 
-  const currentSlideIdx = getCurrentSlideIndex(currentTime);
-  const currentSlide = timeline[currentSlideIdx];
-
-  // Play audio for current slide
-  const playSlideAudio = useCallback((slideIdx: number) => {
-    const slide = timeline[slideIdx];
-    if (!slide) return;
-
-    // Stop previous audio
+  // Stop all audio
+  const stopAllAudio = useCallback(() => {
     if (voiceAudioRef.current) {
       voiceAudioRef.current.pause();
-      voiceAudioRef.current.currentTime = 0;
+      voiceAudioRef.current.src = "";
     }
+    if (musicAudioRef.current) {
+      musicAudioRef.current.pause();
+    }
+  }, []);
 
-    // Play new audio if exists
-    if (slide.audioUrl) {
-      voiceAudioRef.current = new Audio(slide.audioUrl);
-      voiceAudioRef.current.volume = isMuted ? 0 : (voiceVolume / 100);
-      voiceAudioRef.current.play().catch(() => {});
+  // Play voice audio for a slide
+  const playVoiceForSlide = useCallback((slideIdx: number, seekOffset: number = 0) => {
+    const slide = timeline[slideIdx];
+    if (!slide?.audioUrl) return;
+
+    // Create new audio element for each play to avoid issues
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current.src = "";
     }
+    
+    const audio = new Audio(slide.audioUrl);
+    audio.volume = isMuted ? 0 : (voiceVolume / 100);
+    
+    if (seekOffset > 0 && seekOffset < slide.duration) {
+      audio.currentTime = seekOffset;
+    }
+    
+    voiceAudioRef.current = audio;
+    audio.play().catch(err => console.log("Voice play failed:", err));
   }, [timeline, isMuted, voiceVolume]);
 
-  // Main playback loop
+  // Animation loop for smooth playback
+  const updatePlayback = useCallback(() => {
+    if (!isPlaying) return;
+
+    const elapsed = (performance.now() - playStartTimeRef.current) / 1000;
+    const newTime = Math.min(playStartPositionRef.current + elapsed, totalDuration);
+    
+    setCurrentTime(newTime);
+    
+    // Check if we need to change slides
+    const newSlideIdx = getSlideIndexForTime(newTime);
+    setCurrentSlideIdx(prev => {
+      if (prev !== newSlideIdx) {
+        // New slide - play its audio
+        playVoiceForSlide(newSlideIdx);
+        return newSlideIdx;
+      }
+      return prev;
+    });
+    
+    // Check if playback ended
+    if (newTime >= totalDuration) {
+      setIsPlaying(false);
+      stopAllAudio();
+      return;
+    }
+    
+    animationFrameRef.current = requestAnimationFrame(updatePlayback);
+  }, [isPlaying, totalDuration, getSlideIndexForTime, playVoiceForSlide, stopAllAudio]);
+
+  // Start/stop playback
   useEffect(() => {
     if (isPlaying) {
-      const startTimestamp = Date.now();
-      const startTime = currentTime;
-
-      timerRef.current = setInterval(() => {
-        const elapsed = (Date.now() - startTimestamp) / 1000;
-        const newTime = startTime + elapsed;
-        
-        if (newTime >= totalDuration) {
-          setCurrentTime(totalDuration);
-          setIsPlaying(false);
-          return;
-        }
-
-        setCurrentTime(newTime);
-
-        // Check if we need to switch slides
-        const newSlideIdx = getCurrentSlideIndex(newTime);
-        if (newSlideIdx !== currentSlideIndexRef.current) {
-          currentSlideIndexRef.current = newSlideIdx;
-          playSlideAudio(newSlideIdx);
-        }
-      }, 50);
-
-      // Start audio for current slide
-      playSlideAudio(getCurrentSlideIndex(currentTime));
-
-      // Start background music
+      playStartTimeRef.current = performance.now();
+      playStartPositionRef.current = currentTime;
+      
+      // Start voice for current slide
+      const slideIdx = getSlideIndexForTime(currentTime);
+      const slide = timeline[slideIdx];
+      const offsetInSlide = currentTime - slide.startTime;
+      playVoiceForSlide(slideIdx, offsetInSlide);
+      
+      // Start music
       if (musicUrl && musicAudioRef.current) {
-        musicAudioRef.current.currentTime = currentTime;
+        musicAudioRef.current.currentTime = currentTime % (musicAudioRef.current.duration || 1);
         musicAudioRef.current.volume = isMuted ? 0 : (musicVolume / 100);
-        musicAudioRef.current.play().catch(() => {});
+        musicAudioRef.current.play().catch(err => console.log("Music play failed:", err));
       }
+      
+      // Start animation loop
+      animationFrameRef.current = requestAnimationFrame(updatePlayback);
     } else {
-      // Pause everything
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
+      // Stop everything
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
-      if (voiceAudioRef.current) {
-        voiceAudioRef.current.pause();
-      }
-      if (musicAudioRef.current) {
-        musicAudioRef.current.pause();
-      }
+      stopAllAudio();
     }
 
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPlaying, currentTime, totalDuration, getCurrentSlideIndex, playSlideAudio, musicUrl, isMuted, musicVolume]);
+  }, [isPlaying]);
 
-  // Update volumes when changed
+  // Initialize music audio element
+  useEffect(() => {
+    if (musicUrl) {
+      const audio = new Audio(musicUrl);
+      audio.loop = true;
+      audio.volume = musicVolume / 100;
+      audio.preload = "auto";
+      musicAudioRef.current = audio;
+    }
+    
+    return () => {
+      stopAllAudio();
+    };
+  }, [musicUrl]);
+
+  // Update volumes
   useEffect(() => {
     if (voiceAudioRef.current) {
       voiceAudioRef.current.volume = isMuted ? 0 : (voiceVolume / 100);
@@ -160,35 +211,24 @@ export function PreviewPlayer({
     }
   }, [isMuted, voiceVolume, musicVolume]);
 
-  // Initialize music audio
-  useEffect(() => {
-    if (musicUrl) {
-      musicAudioRef.current = new Audio(musicUrl);
-      musicAudioRef.current.loop = true;
-      musicAudioRef.current.volume = musicVolume / 100;
-    }
-    return () => {
-      if (musicAudioRef.current) {
-        musicAudioRef.current.pause();
-        musicAudioRef.current = null;
-      }
-      if (voiceAudioRef.current) {
-        voiceAudioRef.current.pause();
-        voiceAudioRef.current = null;
-      }
-    };
-  }, [musicUrl, musicVolume]);
-
   // Seek to position
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = parseFloat(e.target.value);
     setCurrentTime(newTime);
-    currentSlideIndexRef.current = getCurrentSlideIndex(newTime);
+    
+    const newSlideIdx = getSlideIndexForTime(newTime);
+    setCurrentSlideIdx(newSlideIdx);
     
     if (isPlaying) {
-      playSlideAudio(currentSlideIndexRef.current);
+      playStartTimeRef.current = performance.now();
+      playStartPositionRef.current = newTime;
+      
+      const slide = timeline[newSlideIdx];
+      const offsetInSlide = newTime - slide.startTime;
+      playVoiceForSlide(newSlideIdx, offsetInSlide);
+      
       if (musicAudioRef.current) {
-        musicAudioRef.current.currentTime = newTime;
+        musicAudioRef.current.currentTime = newTime % (musicAudioRef.current.duration || 1);
       }
     }
   };
@@ -198,16 +238,26 @@ export function PreviewPlayer({
     const prevIdx = Math.max(0, currentSlideIdx - 1);
     const newTime = timeline[prevIdx].startTime;
     setCurrentTime(newTime);
-    currentSlideIndexRef.current = prevIdx;
-    if (isPlaying) playSlideAudio(prevIdx);
+    setCurrentSlideIdx(prevIdx);
+    
+    if (isPlaying) {
+      playStartTimeRef.current = performance.now();
+      playStartPositionRef.current = newTime;
+      playVoiceForSlide(prevIdx);
+    }
   };
 
   const skipToNextSlide = () => {
     const nextIdx = Math.min(timeline.length - 1, currentSlideIdx + 1);
     const newTime = timeline[nextIdx].startTime;
     setCurrentTime(newTime);
-    currentSlideIndexRef.current = nextIdx;
-    if (isPlaying) playSlideAudio(nextIdx);
+    setCurrentSlideIdx(nextIdx);
+    
+    if (isPlaying) {
+      playStartTimeRef.current = performance.now();
+      playStartPositionRef.current = newTime;
+      playVoiceForSlide(nextIdx);
+    }
   };
 
   const formatTime = (seconds: number): string => {
@@ -219,7 +269,7 @@ export function PreviewPlayer({
   const togglePlay = () => {
     if (currentTime >= totalDuration) {
       setCurrentTime(0);
-      currentSlideIndexRef.current = 0;
+      setCurrentSlideIdx(0);
     }
     setIsPlaying(!isPlaying);
   };
@@ -227,11 +277,11 @@ export function PreviewPlayer({
   return (
     <div className={`
       bg-card border border-border rounded-lg shadow-lg overflow-hidden
-      transition-all duration-300
+      transition-all duration-300 flex flex-col
       ${isExpanded ? "fixed inset-4 z-50" : "w-full"}
     `}>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b border-border">
+      <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b border-border shrink-0">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
           Preview ({lang.toUpperCase()})
         </span>
@@ -244,7 +294,7 @@ export function PreviewPlayer({
             {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
           <button
-            onClick={onClose}
+            onClick={() => { stopAllAudio(); onClose(); }}
             className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
             title="Close preview"
           >
@@ -255,14 +305,14 @@ export function PreviewPlayer({
 
       {/* Slide Display */}
       <div className={`
-        relative bg-black flex items-center justify-center
-        ${isExpanded ? "flex-1 h-[calc(100%-120px)]" : "aspect-video"}
+        relative bg-black flex items-center justify-center flex-1
+        ${isExpanded ? "" : "aspect-video"}
       `}>
         {currentSlide && (
           <img
             src={currentSlide.imageUrl}
             alt={`Slide ${currentSlide.slideIndex + 1}`}
-            className="max-w-full max-h-full object-contain transition-opacity duration-500"
+            className="max-w-full max-h-full object-contain"
             key={currentSlide.slideIndex}
           />
         )}
@@ -270,10 +320,17 @@ export function PreviewPlayer({
         <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
           {currentSlideIdx + 1} / {timeline.length}
         </div>
+        {/* Audio indicator */}
+        {currentSlide?.audioUrl && (
+          <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+            <Volume2 className="w-3 h-3" />
+            <span>Audio</span>
+          </div>
+        )}
       </div>
 
       {/* Controls */}
-      <div className="p-3 bg-card">
+      <div className="p-3 bg-card shrink-0">
         {/* Progress bar */}
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs text-muted-foreground w-10 text-right font-mono">
@@ -282,7 +339,7 @@ export function PreviewPlayer({
           <input
             type="range"
             min={0}
-            max={totalDuration}
+            max={totalDuration || 1}
             step={0.1}
             value={currentTime}
             onChange={handleSeek}
@@ -336,4 +393,3 @@ export function PreviewPlayer({
     </div>
   );
 }
-
