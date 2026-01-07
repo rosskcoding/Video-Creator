@@ -54,7 +54,6 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { PreviewPlayer } from "@/components/PreviewPlayer";
 
 type SlideFilter = "all" | "needs-audio" | "ready";
 
@@ -74,7 +73,6 @@ export default function ProjectEditorPage() {
   const [showRenderMenu, setShowRenderMenu] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
   const [activeRenderJob, setActiveRenderJob] = useState<{
     jobId: string;
     lang: string;
@@ -850,13 +848,13 @@ export default function ProjectEditorPage() {
                 )}
           </div>
 
-          {/* Preview Button */}
+          {/* Preview Button (coming soon) */}
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setShowPreview(true)}
+            onClick={() => toast.info("Preview coming soon")}
             disabled={!slides?.length}
-            title="Quick Preview"
+            title="Quick Preview (coming soon)"
             aria-label="Quick Preview"
           >
             <Play className="w-4 h-4" />
@@ -982,18 +980,6 @@ export default function ProjectEditorPage() {
 
         {/* Column B: Slide Preview */}
         <main className="flex-1 flex flex-col bg-background/50 overflow-hidden">
-          {/* Preview Player */}
-          {showPreview && slides?.length && (
-            <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-8">
-              <div className="w-full max-w-3xl">
-                <PreviewPlayer
-                  slides={slides}
-                  lang={selectedLang}
-                  onClose={() => setShowPreview(false)}
-                />
-              </div>
-            </div>
-          )}
 
           {selectedSlide ? (
             <>
