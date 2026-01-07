@@ -989,10 +989,6 @@ export default function ProjectEditorPage() {
                 <PreviewPlayer
                   slides={slides}
                   lang={selectedLang}
-                  musicUrl={audioSettings?.background_music_enabled && audioSettings?.music_asset_id ? 
-                    api.getMusicUrl(projectId) : undefined}
-                  musicVolume={30}
-                  voiceVolume={100}
                   onClose={() => setShowPreview(false)}
                 />
               </div>
