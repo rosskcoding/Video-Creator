@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FolderOpen, Settings2, ListTodo, Video, Archive } from "lucide-react";
+import { FolderOpen, Settings2, ListTodo, Video, Archive, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigation = [
@@ -10,6 +10,7 @@ const navigation = [
   { name: "Workspace", href: "/workspace", icon: Archive },
   { name: "Jobs", href: "/admin/jobs", icon: ListTodo },
   { name: "Admin", href: "/admin", icon: Settings2 },
+  { name: "Help", href: "/help", icon: HelpCircle },
 ];
 
 export function Sidebar() {
