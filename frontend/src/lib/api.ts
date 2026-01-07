@@ -304,7 +304,7 @@ export const api = {
   },
 
   // Slides
-  async getSlides(projectId: string, versionId: string): Promise<Slide[]> {
+  async getSlides(projectId: string, versionId: string): Promise<SlideWithScripts[]> {
     const { data } = await client.get(`/slides/projects/${projectId}/versions/${versionId}/slides`);
     return data;
   },

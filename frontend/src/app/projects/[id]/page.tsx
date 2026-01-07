@@ -54,6 +54,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { PreviewPlayer } from "@/components/PreviewPlayer";
 
 type SlideFilter = "all" | "needs-audio" | "ready";
 
@@ -73,6 +74,7 @@ export default function ProjectEditorPage() {
   const [showRenderMenu, setShowRenderMenu] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [activeRenderJob, setActiveRenderJob] = useState<{
     jobId: string;
     lang: string;
@@ -848,6 +850,18 @@ export default function ProjectEditorPage() {
                 )}
           </div>
 
+          {/* Preview Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowPreview(true)}
+            disabled={!slides?.length}
+            title="Quick Preview"
+            aria-label="Quick Preview"
+          >
+            <Play className="w-4 h-4" />
+          </Button>
+
           <Link href={`/projects/${projectId}/glossary`}>
             <Button
               variant="ghost"
@@ -968,6 +982,23 @@ export default function ProjectEditorPage() {
 
         {/* Column B: Slide Preview */}
         <main className="flex-1 flex flex-col bg-background/50 overflow-hidden">
+          {/* Preview Player */}
+          {showPreview && slides?.length && (
+            <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-8">
+              <div className="w-full max-w-3xl">
+                <PreviewPlayer
+                  slides={slides}
+                  lang={selectedLang}
+                  musicUrl={audioSettings?.background_music_enabled && audioSettings?.music_asset_id ? 
+                    api.getMusicUrl(projectId) : undefined}
+                  musicVolume={30}
+                  voiceVolume={100}
+                  onClose={() => setShowPreview(false)}
+                />
+              </div>
+            </div>
+          )}
+
           {selectedSlide ? (
             <>
               {/* Preview */}
@@ -1080,42 +1111,6 @@ export default function ProjectEditorPage() {
                 </div>
               </div>
 
-              {/* Voice selector */}
-              <div className="flex items-center gap-2 mt-3">
-                <span className="text-label text-muted-foreground">Voice:</span>
-                <Select 
-                  value={selectedVoiceId || ""}
-                  onChange={(e) => {
-                    const voiceId = e.target.value;
-                    setSelectedVoiceId(voiceId);
-                    updateVoiceMutation.mutate(voiceId);
-                  }}
-                  className="flex-1 h-8 text-[13px]"
-                >
-                  <option value="">Select voice...</option>
-                  {voicesData?.voices?.map((voice) => (
-                    <option key={voice.voice_id} value={voice.voice_id}>
-                      {voice.name} ({voice.labels.gender === "female" ? "♀" : voice.labels.gender === "male" ? "♂" : "●"})
-                    </option>
-                  ))}
-                </Select>
-                {selectedVoiceId && voicesData?.voices?.find(v => v.voice_id === selectedVoiceId)?.preview_url && (
-                  <button
-                    onClick={() => {
-                      const voice = voicesData?.voices?.find(v => v.voice_id === selectedVoiceId);
-                      if (voice?.preview_url) {
-                        const audio = new Audio(voice.preview_url);
-                        audio.play();
-                      }
-                    }}
-                    className="p-1.5 rounded hover:bg-muted transition-colors"
-                    title="Preview voice"
-                    aria-label="Preview voice"
-                  >
-                    <Play className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
             </div>
 
             {/* Script Textarea */}
