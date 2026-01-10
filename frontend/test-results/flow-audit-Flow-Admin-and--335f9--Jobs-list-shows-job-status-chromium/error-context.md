@@ -1,0 +1,408 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - link [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img [ref=e5]
+      - navigation [ref=e8]:
+        - link "Projects" [ref=e9] [cursor=pointer]:
+          - /url: /
+          - img [ref=e10]
+          - generic: Projects
+        - link "Workspace" [ref=e12] [cursor=pointer]:
+          - /url: /workspace
+          - img [ref=e13]
+          - generic: Workspace
+        - link "Jobs" [ref=e16] [cursor=pointer]:
+          - /url: /admin/jobs
+          - img [ref=e17]
+          - generic: Jobs
+        - link "Admin" [ref=e20] [cursor=pointer]:
+          - /url: /admin
+          - img [ref=e21]
+          - generic: Admin
+        - link "Help" [ref=e24] [cursor=pointer]:
+          - /url: /help
+          - img [ref=e25]
+          - generic: Help
+    - main [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e31]:
+          - generic [ref=e32]:
+            - heading "Jobs Monitor" [level=1] [ref=e33]
+            - paragraph [ref=e34]: Track background tasks and render jobs
+          - button "Refresh" [ref=e35] [cursor=pointer]:
+            - img [ref=e36]
+            - text: Refresh
+        - main [ref=e41]:
+          - table [ref=e44]:
+            - rowgroup [ref=e45]:
+              - row "Job ID Project Type Language Status Progress Started" [ref=e46]:
+                - columnheader [ref=e47]
+                - columnheader "Job ID" [ref=e48]
+                - columnheader "Project" [ref=e49]
+                - columnheader "Type" [ref=e50]
+                - columnheader "Language" [ref=e51]
+                - columnheader "Status" [ref=e52]
+                - columnheader "Progress" [ref=e53]
+                - columnheader "Started" [ref=e54]
+                - columnheader [ref=e55]
+            - rowgroup [ref=e56]:
+              - row "33920b1d... Test 2 Video Render EN Done 100% 1/6/2026, 10:35:36 PM" [ref=e57] [cursor=pointer]:
+                - cell [ref=e58]:
+                  - img [ref=e59]
+                - cell "33920b1d..." [ref=e61]
+                - cell "Test 2" [ref=e62]
+                - cell "Video Render" [ref=e63]
+                - cell "EN" [ref=e64]
+                - cell "Done" [ref=e65]:
+                  - generic [ref=e66]: Done
+                - cell "100%" [ref=e67]
+                - cell "1/6/2026, 10:35:36 PM" [ref=e68]
+                - cell [ref=e69]
+              - row "4a92e780... Test 2 Video Render EN Failed - 1/6/2026, 10:35:05 PM" [ref=e70] [cursor=pointer]:
+                - cell [ref=e71]:
+                  - img [ref=e72]
+                - cell "4a92e780..." [ref=e74]
+                - cell "Test 2" [ref=e75]
+                - cell "Video Render" [ref=e76]
+                - cell "EN" [ref=e77]
+                - cell "Failed" [ref=e78]:
+                  - generic [ref=e79]: Failed
+                - cell "-" [ref=e80]
+                - cell "1/6/2026, 10:35:05 PM" [ref=e81]
+                - cell [ref=e82]
+              - row "881dabc3... Test 2 Video Render EN Done 100% 1/6/2026, 10:32:54 PM" [ref=e83] [cursor=pointer]:
+                - cell [ref=e84]:
+                  - img [ref=e85]
+                - cell "881dabc3..." [ref=e87]
+                - cell "Test 2" [ref=e88]
+                - cell "Video Render" [ref=e89]
+                - cell "EN" [ref=e90]
+                - cell "Done" [ref=e91]:
+                  - generic [ref=e92]: Done
+                - cell "100%" [ref=e93]
+                - cell "1/6/2026, 10:32:54 PM" [ref=e94]
+                - cell [ref=e95]
+              - row "b8e7d0d6... Test 2 Video Render EN Done 100% 1/6/2026, 10:30:57 PM" [ref=e96] [cursor=pointer]:
+                - cell [ref=e97]:
+                  - img [ref=e98]
+                - cell "b8e7d0d6..." [ref=e100]
+                - cell "Test 2" [ref=e101]
+                - cell "Video Render" [ref=e102]
+                - cell "EN" [ref=e103]
+                - cell "Done" [ref=e104]:
+                  - generic [ref=e105]: Done
+                - cell "100%" [ref=e106]
+                - cell "1/6/2026, 10:30:57 PM" [ref=e107]
+                - cell [ref=e108]
+              - row "416f1bcd... Test 2 Video Render AR Done 100% 1/6/2026, 10:27:39 PM" [ref=e109] [cursor=pointer]:
+                - cell [ref=e110]:
+                  - img [ref=e111]
+                - cell "416f1bcd..." [ref=e113]
+                - cell "Test 2" [ref=e114]
+                - cell "Video Render" [ref=e115]
+                - cell "AR" [ref=e116]
+                - cell "Done" [ref=e117]:
+                  - generic [ref=e118]: Done
+                - cell "100%" [ref=e119]
+                - cell "1/6/2026, 10:27:39 PM" [ref=e120]
+                - cell [ref=e121]
+              - row "12b1effe... Test 2 Video Render UK Done 100% 1/6/2026, 10:27:06 PM" [ref=e122] [cursor=pointer]:
+                - cell [ref=e123]:
+                  - img [ref=e124]
+                - cell "12b1effe..." [ref=e126]
+                - cell "Test 2" [ref=e127]
+                - cell "Video Render" [ref=e128]
+                - cell "UK" [ref=e129]
+                - cell "Done" [ref=e130]:
+                  - generic [ref=e131]: Done
+                - cell "100%" [ref=e132]
+                - cell "1/6/2026, 10:27:06 PM" [ref=e133]
+                - cell [ref=e134]
+              - row "09525cb1... Test 2 Video Render AR Failed - 1/6/2026, 10:26:26 PM" [ref=e135] [cursor=pointer]:
+                - cell [ref=e136]:
+                  - img [ref=e137]
+                - cell "09525cb1..." [ref=e139]
+                - cell "Test 2" [ref=e140]
+                - cell "Video Render" [ref=e141]
+                - cell "AR" [ref=e142]
+                - cell "Failed" [ref=e143]:
+                  - generic [ref=e144]: Failed
+                - cell "-" [ref=e145]
+                - cell "1/6/2026, 10:26:26 PM" [ref=e146]
+                - cell [ref=e147]
+              - row "061ab247... Test 2 Video Render EN Done 100% 1/6/2026, 10:20:43 PM" [ref=e148] [cursor=pointer]:
+                - cell [ref=e149]:
+                  - img [ref=e150]
+                - cell "061ab247..." [ref=e152]
+                - cell "Test 2" [ref=e153]
+                - cell "Video Render" [ref=e154]
+                - cell "EN" [ref=e155]
+                - cell "Done" [ref=e156]:
+                  - generic [ref=e157]: Done
+                - cell "100%" [ref=e158]
+                - cell "1/6/2026, 10:20:43 PM" [ref=e159]
+                - cell [ref=e160]
+              - row "7b76dc68... Test 2 Video Render UK Done 100% 1/6/2026, 10:18:51 PM" [ref=e161] [cursor=pointer]:
+                - cell [ref=e162]:
+                  - img [ref=e163]
+                - cell "7b76dc68..." [ref=e165]
+                - cell "Test 2" [ref=e166]
+                - cell "Video Render" [ref=e167]
+                - cell "UK" [ref=e168]
+                - cell "Done" [ref=e169]:
+                  - generic [ref=e170]: Done
+                - cell "100%" [ref=e171]
+                - cell "1/6/2026, 10:18:51 PM" [ref=e172]
+                - cell [ref=e173]
+              - row "4fd35e42... Test 2 Video Render AR Done 100% 1/6/2026, 10:16:07 PM" [ref=e174] [cursor=pointer]:
+                - cell [ref=e175]:
+                  - img [ref=e176]
+                - cell "4fd35e42..." [ref=e178]
+                - cell "Test 2" [ref=e179]
+                - cell "Video Render" [ref=e180]
+                - cell "AR" [ref=e181]
+                - cell "Done" [ref=e182]:
+                  - generic [ref=e183]: Done
+                - cell "100%" [ref=e184]
+                - cell "1/6/2026, 10:16:07 PM" [ref=e185]
+                - cell [ref=e186]
+              - row "dd8cc67f... Test 2 Video Render AR Failed - 1/6/2026, 10:14:33 PM" [ref=e187] [cursor=pointer]:
+                - cell [ref=e188]:
+                  - img [ref=e189]
+                - cell "dd8cc67f..." [ref=e191]
+                - cell "Test 2" [ref=e192]
+                - cell "Video Render" [ref=e193]
+                - cell "AR" [ref=e194]
+                - cell "Failed" [ref=e195]:
+                  - generic [ref=e196]: Failed
+                - cell "-" [ref=e197]
+                - cell "1/6/2026, 10:14:33 PM" [ref=e198]
+                - cell [ref=e199]
+              - row "81f4a302... Test 2 Video Render EN Done 100% 1/6/2026, 10:10:49 PM" [ref=e200] [cursor=pointer]:
+                - cell [ref=e201]:
+                  - img [ref=e202]
+                - cell "81f4a302..." [ref=e204]
+                - cell "Test 2" [ref=e205]
+                - cell "Video Render" [ref=e206]
+                - cell "EN" [ref=e207]
+                - cell "Done" [ref=e208]:
+                  - generic [ref=e209]: Done
+                - cell "100%" [ref=e210]
+                - cell "1/6/2026, 10:10:49 PM" [ref=e211]
+                - cell [ref=e212]
+              - row "d30c2b1f... Test 2 Video Render EN Done 100% 1/6/2026, 10:07:20 PM" [ref=e213] [cursor=pointer]:
+                - cell [ref=e214]:
+                  - img [ref=e215]
+                - cell "d30c2b1f..." [ref=e217]
+                - cell "Test 2" [ref=e218]
+                - cell "Video Render" [ref=e219]
+                - cell "EN" [ref=e220]
+                - cell "Done" [ref=e221]:
+                  - generic [ref=e222]: Done
+                - cell "100%" [ref=e223]
+                - cell "1/6/2026, 10:07:20 PM" [ref=e224]
+                - cell [ref=e225]
+              - row "3437cd2c... Test 2 Video Render EN Done 100% 1/6/2026, 10:00:18 PM" [ref=e226] [cursor=pointer]:
+                - cell [ref=e227]:
+                  - img [ref=e228]
+                - cell "3437cd2c..." [ref=e230]
+                - cell "Test 2" [ref=e231]
+                - cell "Video Render" [ref=e232]
+                - cell "EN" [ref=e233]
+                - cell "Done" [ref=e234]:
+                  - generic [ref=e235]: Done
+                - cell "100%" [ref=e236]
+                - cell "1/6/2026, 10:00:18 PM" [ref=e237]
+                - cell [ref=e238]
+              - row "aac916eb... Test 2 Video Render EN Done 100% 1/6/2026, 9:54:43 PM" [ref=e239] [cursor=pointer]:
+                - cell [ref=e240]:
+                  - img [ref=e241]
+                - cell "aac916eb..." [ref=e243]
+                - cell "Test 2" [ref=e244]
+                - cell "Video Render" [ref=e245]
+                - cell "EN" [ref=e246]
+                - cell "Done" [ref=e247]:
+                  - generic [ref=e248]: Done
+                - cell "100%" [ref=e249]
+                - cell "1/6/2026, 9:54:43 PM" [ref=e250]
+                - cell [ref=e251]
+              - row "76ae153f... Test 2 Video Render EN Failed - 1/6/2026, 9:50:40 PM" [ref=e252] [cursor=pointer]:
+                - cell [ref=e253]:
+                  - img [ref=e254]
+                - cell "76ae153f..." [ref=e256]
+                - cell "Test 2" [ref=e257]
+                - cell "Video Render" [ref=e258]
+                - cell "EN" [ref=e259]
+                - cell "Failed" [ref=e260]:
+                  - generic [ref=e261]: Failed
+                - cell "-" [ref=e262]
+                - cell "1/6/2026, 9:50:40 PM" [ref=e263]
+                - cell [ref=e264]
+              - row "c48045cf... Test 2 Video Render EN Failed - 1/6/2026, 9:47:09 PM" [ref=e265] [cursor=pointer]:
+                - cell [ref=e266]:
+                  - img [ref=e267]
+                - cell "c48045cf..." [ref=e269]
+                - cell "Test 2" [ref=e270]
+                - cell "Video Render" [ref=e271]
+                - cell "EN" [ref=e272]
+                - cell "Failed" [ref=e273]:
+                  - generic [ref=e274]: Failed
+                - cell "-" [ref=e275]
+                - cell "1/6/2026, 9:47:09 PM" [ref=e276]
+                - cell [ref=e277]
+              - row "2cb3829f... Test 2 Video Render EN Failed - 1/6/2026, 9:46:58 PM" [ref=e278] [cursor=pointer]:
+                - cell [ref=e279]:
+                  - img [ref=e280]
+                - cell "2cb3829f..." [ref=e282]
+                - cell "Test 2" [ref=e283]
+                - cell "Video Render" [ref=e284]
+                - cell "EN" [ref=e285]
+                - cell "Failed" [ref=e286]:
+                  - generic [ref=e287]: Failed
+                - cell "-" [ref=e288]
+                - cell "1/6/2026, 9:46:58 PM" [ref=e289]
+                - cell [ref=e290]
+              - row "81a23acb... Test 2 Video Render UK Done 100% 1/6/2026, 9:06:55 PM" [ref=e291] [cursor=pointer]:
+                - cell [ref=e292]:
+                  - img [ref=e293]
+                - cell "81a23acb..." [ref=e295]
+                - cell "Test 2" [ref=e296]
+                - cell "Video Render" [ref=e297]
+                - cell "UK" [ref=e298]
+                - cell "Done" [ref=e299]:
+                  - generic [ref=e300]: Done
+                - cell "100%" [ref=e301]
+                - cell "1/6/2026, 9:06:55 PM" [ref=e302]
+                - cell [ref=e303]
+              - row "b1f50cb1... Test Video Render UK Done 100% 1/6/2026, 8:07:02 PM All" [ref=e304] [cursor=pointer]:
+                - cell [ref=e305]:
+                  - img [ref=e306]
+                - cell "b1f50cb1..." [ref=e308]
+                - cell "Test" [ref=e309]
+                - cell "Video Render" [ref=e310]
+                - cell "UK" [ref=e311]
+                - cell "Done" [ref=e312]:
+                  - generic [ref=e313]: Done
+                - cell "100%" [ref=e314]
+                - cell "1/6/2026, 8:07:02 PM" [ref=e315]
+                - cell "All" [ref=e316]:
+                  - button "All" [ref=e318]:
+                    - img [ref=e319]
+                    - text: All
+              - row "87a4bcf2... Test Video Render EN Done 100% 1/6/2026, 7:22:45 PM All" [ref=e321] [cursor=pointer]:
+                - cell [ref=e322]:
+                  - img [ref=e323]
+                - cell "87a4bcf2..." [ref=e325]
+                - cell "Test" [ref=e326]
+                - cell "Video Render" [ref=e327]
+                - cell "EN" [ref=e328]
+                - cell "Done" [ref=e329]:
+                  - generic [ref=e330]: Done
+                - cell "100%" [ref=e331]
+                - cell "1/6/2026, 7:22:45 PM" [ref=e332]
+                - cell "All" [ref=e333]:
+                  - button "All" [ref=e335]:
+                    - img [ref=e336]
+                    - text: All
+              - row "8c23ca81... Test Video Render EN Done 100% 1/6/2026, 7:16:43 PM All" [ref=e338] [cursor=pointer]:
+                - cell [ref=e339]:
+                  - img [ref=e340]
+                - cell "8c23ca81..." [ref=e342]
+                - cell "Test" [ref=e343]
+                - cell "Video Render" [ref=e344]
+                - cell "EN" [ref=e345]
+                - cell "Done" [ref=e346]:
+                  - generic [ref=e347]: Done
+                - cell "100%" [ref=e348]
+                - cell "1/6/2026, 7:16:43 PM" [ref=e349]
+                - cell "All" [ref=e350]:
+                  - button "All" [ref=e352]:
+                    - img [ref=e353]
+                    - text: All
+              - row "91460abc... Test Video Render EN Done 100% 1/6/2026, 7:11:44 PM All" [ref=e355] [cursor=pointer]:
+                - cell [ref=e356]:
+                  - img [ref=e357]
+                - cell "91460abc..." [ref=e359]
+                - cell "Test" [ref=e360]
+                - cell "Video Render" [ref=e361]
+                - cell "EN" [ref=e362]
+                - cell "Done" [ref=e363]:
+                  - generic [ref=e364]: Done
+                - cell "100%" [ref=e365]
+                - cell "1/6/2026, 7:11:44 PM" [ref=e366]
+                - cell "All" [ref=e367]:
+                  - button "All" [ref=e369]:
+                    - img [ref=e370]
+                    - text: All
+              - row "5822d3ff... Test Video Render EN Done 100% 1/6/2026, 7:10:32 PM All" [ref=e372] [cursor=pointer]:
+                - cell [ref=e373]:
+                  - img [ref=e374]
+                - cell "5822d3ff..." [ref=e376]
+                - cell "Test" [ref=e377]
+                - cell "Video Render" [ref=e378]
+                - cell "EN" [ref=e379]
+                - cell "Done" [ref=e380]:
+                  - generic [ref=e381]: Done
+                - cell "100%" [ref=e382]
+                - cell "1/6/2026, 7:10:32 PM" [ref=e383]
+                - cell "All" [ref=e384]:
+                  - button "All" [ref=e386]:
+                    - img [ref=e387]
+                    - text: All
+              - row "149245fa... Test Video Render EN Failed - 1/6/2026, 7:01:59 PM All" [ref=e389] [cursor=pointer]:
+                - cell [ref=e390]:
+                  - img [ref=e391]
+                - cell "149245fa..." [ref=e393]
+                - cell "Test" [ref=e394]
+                - cell "Video Render" [ref=e395]
+                - cell "EN" [ref=e396]
+                - cell "Failed" [ref=e397]:
+                  - generic [ref=e398]: Failed
+                - cell "-" [ref=e399]
+                - cell "1/6/2026, 7:01:59 PM" [ref=e400]
+                - cell "All" [ref=e401]:
+                  - button "All" [ref=e403]:
+                    - img [ref=e404]
+                    - text: All
+              - row "919b1888... Test Video Render EN Failed - - All" [ref=e406] [cursor=pointer]:
+                - cell [ref=e407]:
+                  - img [ref=e408]
+                - cell "919b1888..." [ref=e410]
+                - cell "Test" [ref=e411]
+                - cell "Video Render" [ref=e412]
+                - cell "EN" [ref=e413]
+                - cell "Failed" [ref=e414]:
+                  - generic [ref=e415]: Failed
+                - cell "-" [ref=e416]
+                - cell "-" [ref=e417]
+                - cell "All" [ref=e418]:
+                  - button "All" [ref=e420]:
+                    - img [ref=e421]
+                    - text: All
+              - row "ad3228dd... Test Video Render EN Queued - - Kill All" [ref=e423] [cursor=pointer]:
+                - cell [ref=e424]:
+                  - img [ref=e425]
+                - cell "ad3228dd..." [ref=e427]
+                - cell "Test" [ref=e428]
+                - cell "Video Render" [ref=e429]
+                - cell "EN" [ref=e430]
+                - cell "Queued" [ref=e431]:
+                  - generic [ref=e432]: Queued
+                - cell "-" [ref=e433]
+                - cell "-" [ref=e434]
+                - cell "Kill All" [ref=e435]:
+                  - generic [ref=e436]:
+                    - button "Kill" [ref=e437]:
+                      - img [ref=e438]
+                      - text: Kill
+                    - button "All" [ref=e440]:
+                      - img [ref=e441]
+                      - text: All
+  - region "Notifications alt+T"
+  - alert [ref=e443]
+```

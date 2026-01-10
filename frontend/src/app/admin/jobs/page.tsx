@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, ChevronDown, ChevronRight, RotateCcw, AlertCircle, XCircle, Square } from "lucide-react";
 import { toast } from "sonner";
@@ -164,9 +164,8 @@ export default function AdminJobsPage() {
                   </tr>
                 ) : (
                   jobs.map((job) => (
-                    <>
+                    <React.Fragment key={job.id}>
                       <tr
-                        key={job.id}
                         className={cn(
                           "border-t border-border cursor-pointer hover:bg-muted/50 transition-colors",
                           expandedJob === job.id && "bg-muted/30"
@@ -243,7 +242,7 @@ export default function AdminJobsPage() {
 
                       {/* Expanded row */}
                       {expandedJob === job.id && (
-                        <tr key={`${job.id}-expanded`}>
+                        <tr>
                           <td colSpan={9} className="bg-muted/20 px-6 py-4">
                             <div className="space-y-3">
                               {/* Error message */}
@@ -275,7 +274,12 @@ export default function AdminJobsPage() {
                                   <p className="text-muted-foreground">Output</p>
                                   <p className="font-medium font-mono text-[12px] truncate">
                                     {job.download_video_url ? (
-                                      <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}${job.download_video_url}`} className="text-primary hover:underline" target="_blank">
+                                      <a 
+                                        href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}${job.download_video_url}`} 
+                                        className="text-primary hover:underline" 
+                                        target="_blank"
+                                        rel="noreferrer noopener"
+                                      >
                                         Download Video
                                       </a>
                                     ) : "-"}
@@ -313,7 +317,7 @@ export default function AdminJobsPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))
                 )}
               </tbody>

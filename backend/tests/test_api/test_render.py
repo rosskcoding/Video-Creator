@@ -239,7 +239,7 @@ class TestCancelAllProjectJobsAPI:
 
         # Verify DB update
         await db_session.refresh(sample_render_job)
-        assert sample_render_job.status == JobStatus.FAILED
+        assert sample_render_job.status == JobStatus.CANCELLED
         assert "project cancel" in (sample_render_job.error_message or "").lower()
 
 

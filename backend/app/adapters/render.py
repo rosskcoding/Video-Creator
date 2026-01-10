@@ -244,15 +244,19 @@ class RenderAdapter:
         audio_path: Path,
         output_path: Path
     ) -> None:
-        """Combine video with audio track"""
+        """Combine video with audio track, re-encoding to H.264 for compatibility"""
         cmd = [
             "ffmpeg", "-y",
             "-i", str(video_path),
             "-i", str(audio_path),
-            "-c:v", "copy",
+            "-c:v", self.video_codec,  # libx264 for H.264
+            "-preset", "fast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
             "-c:a", self.audio_codec,
             "-b:a", self.audio_bitrate,
             "-shortest",
+            "-movflags", "+faststart",
             str(output_path)
         ]
         
@@ -268,6 +272,8 @@ class RenderAdapter:
         ducking_enabled: bool = True,
         ducking_strength: str = "default",
         target_lufs: int = -14,
+        music_fade_in_sec: float = 2.0,
+        music_fade_out_sec: float = 3.0,
     ) -> Path:
         """
         Mix voice and background music with ducking and loudness normalization.
@@ -281,6 +287,8 @@ class RenderAdapter:
             ducking_enabled: Whether to duck music under voice
             ducking_strength: 'light', 'default', or 'strong'
             target_lufs: Target loudness in LUFS
+            music_fade_in_sec: Fade in duration for music at start (0 = no fade)
+            music_fade_out_sec: Fade out duration for music at end (0 = no fade)
             
         Returns:
             Path to mixed audio
@@ -333,11 +341,24 @@ class RenderAdapter:
         # Build filter complex for mixing
         ducking_params = self._get_ducking_params(ducking_strength)
         
+        # Build music processing chain with optional fade in/out
+        # Start with trim and volume
+        music_chain = f"[1:a]atrim=0:{voice_duration},asetpts=PTS-STARTPTS,volume={music_gain_db}dB"
+        
+        # Add fade in if specified
+        if music_fade_in_sec > 0:
+            music_chain += f",afade=t=in:st=0:d={music_fade_in_sec}"
+        
+        # Add fade out if specified (fade starts at voice_duration - fade_out)
+        if music_fade_out_sec > 0:
+            fade_out_start = max(0, voice_duration - music_fade_out_sec)
+            music_chain += f",afade=t=out:st={fade_out_start}:d={music_fade_out_sec}"
+        
         if ducking_enabled:
             # Sidechain compress music with voice
             filter_complex = (
                 f"[0:a]volume={voice_gain_db}dB[voice];"
-                f"[1:a]atrim=0:{voice_duration},asetpts=PTS-STARTPTS,volume={music_gain_db}dB[music_vol];"
+                f"{music_chain}[music_vol];"
                 f"[music_vol][voice]sidechaincompress="
                 f"threshold={ducking_params['threshold']}:"
                 f"ratio={ducking_params['ratio']}:"
@@ -352,7 +373,7 @@ class RenderAdapter:
             # Simple mix without ducking
             filter_complex = (
                 f"[0:a]volume={voice_gain_db}dB[voice];"
-                f"[1:a]atrim=0:{voice_duration},asetpts=PTS-STARTPTS,volume={music_gain_db}dB[music];"
+                f"{music_chain}[music];"
                 # NOTE: See comment above about amix normalization.
                 f"[voice][music]amix=inputs=2:duration=first:normalize=0[mixed];"
                 f"[mixed]loudnorm=I={target_lufs}:TP=-1.5:LRA=11[out]"
@@ -578,6 +599,196 @@ class RenderAdapter:
             raise RuntimeError(f"FFmpeg error: {stderr.decode()}")
         
         return stdout.decode(), stderr.decode()
+    
+    async def create_static_clip(
+        self,
+        image_path: Path,
+        duration: float,
+        output_path: Path,
+    ) -> Path:
+        """
+        Create a static video clip from an image.
+        
+        Args:
+            image_path: Path to source image
+            duration: Duration of the clip in seconds
+            output_path: Path for output video (webm or mp4)
+        
+        Returns:
+            Path to created clip
+        """
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Determine codec based on output format
+        if output_path.suffix.lower() == ".webm":
+            codec = "libvpx-vp9"
+            pix_fmt = "yuva420p"
+        else:
+            codec = "libx264"
+            pix_fmt = "yuv420p"
+        
+        cmd = [
+            "ffmpeg", "-y",
+            "-loop", "1",
+            "-i", str(image_path),
+            "-c:v", codec,
+            "-t", str(duration),
+            "-pix_fmt", pix_fmt,
+            "-vf", f"scale={self.width}:{self.height}:force_original_aspect_ratio=decrease,pad={self.width}:{self.height}:(ow-iw)/2:(oh-ih)/2",
+            "-r", str(self.fps),
+            str(output_path)
+        ]
+        
+        await self._run_ffmpeg(cmd)
+        return output_path
+    
+    async def concatenate_clips(
+        self,
+        clips: List[Tuple[Path, float]],  # [(clip_path, duration), ...]
+        output_path: Path,
+        transition_type: Optional[str] = None,
+        transition_duration: Optional[float] = None,
+    ) -> Path:
+        """
+        Concatenate multiple video clips with transitions.
+        
+        Args:
+            clips: List of (clip_path, duration) tuples
+            output_path: Path for output video
+            transition_type: 'fade', 'crossfade', or 'none'
+            transition_duration: Duration of transition in seconds
+        
+        Returns:
+            Path to concatenated video
+        """
+        transition_type = (transition_type or self.transition_type or "fade").lower()
+        transition_duration = float(transition_duration or self.transition_duration)
+        
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        if len(clips) == 0:
+            raise ValueError("No clips to concatenate")
+        
+        if len(clips) == 1:
+            # Just copy the single clip
+            import shutil
+            shutil.copy(clips[0][0], output_path)
+            return output_path
+        
+        # Create a unique temp dir to avoid concurrency issues across parallel renders
+        import uuid as _uuid
+        temp_dir = output_path.parent / f"_tmp_concat_{_uuid.uuid4().hex}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        concat_file = temp_dir / "concat.txt"
+        
+        with open(concat_file, "w") as f:
+            for clip_path, _ in clips:
+                f.write(f"file '{clip_path}'\n")
+        
+        if transition_type == "none":
+            # Simple concat without transitions
+            cmd = [
+                "ffmpeg", "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", str(concat_file),
+                "-c:v", self.video_codec,
+                "-pix_fmt", "yuv420p",
+                str(output_path)
+            ]
+        else:
+            # Use xfade filter for transitions
+            # Build complex filter graph
+            inputs = []
+            filter_parts = []
+            
+            for i, (clip_path, _) in enumerate(clips):
+                inputs.extend(["-i", str(clip_path)])
+            
+            # Build xfade chain
+            num_clips = len(clips)
+            current_offset = 0.0
+            
+            for i in range(num_clips - 1):
+                clip_duration = clips[i][1]
+                offset = current_offset + clip_duration - transition_duration
+                
+                if i == 0:
+                    # First transition: [0:v][1:v] -> [v0]
+                    filter_parts.append(f"[{i}:v][{i+1}:v]xfade=transition=fade:duration={transition_duration}:offset={offset}[v{i}]")
+                else:
+                    # Subsequent: [v{i-1}][{i+1}:v] -> [v{i}]
+                    filter_parts.append(f"[v{i-1}][{i+1}:v]xfade=transition=fade:duration={transition_duration}:offset={offset}[v{i}]")
+                
+                current_offset = offset
+            
+            filter_complex = ";".join(filter_parts)
+            final_output = f"[v{num_clips-2}]"
+            
+            cmd = [
+                "ffmpeg", "-y",
+                *inputs,
+                "-filter_complex", f"{filter_complex}",
+                "-map", final_output,
+                "-c:v", self.video_codec,
+                "-pix_fmt", "yuv420p",
+                str(output_path)
+            ]
+        
+        await self._run_ffmpeg(cmd)
+        
+        # Cleanup
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        
+        return output_path
+    
+    async def add_audio_to_video(
+        self,
+        video_path: Path,
+        audio_path: Path,
+        output_path: Path,
+    ) -> Path:
+        """
+        Add audio track to video and ensure H.264 encoding for compatibility.
+        
+        Args:
+            video_path: Path to input video
+            audio_path: Path to audio file
+            output_path: Path for output video with audio
+        
+        Returns:
+            Path to output video
+        """
+        output_path = Path(output_path)
+        temp_output = output_path.parent / f"{output_path.stem}_with_audio.mp4"
+        
+        # Re-encode to H.264 for maximum compatibility (QuickTime, browsers, etc.)
+        # VP9/WebM clips from render-service need to be converted
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(video_path),
+            "-i", str(audio_path),
+            "-c:v", self.video_codec,  # libx264 for H.264
+            "-preset", "fast",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", self.audio_codec,
+            "-b:a", self.audio_bitrate,
+            "-shortest",
+            "-movflags", "+faststart",  # Enable streaming
+            str(temp_output)
+        ]
+        
+        await self._run_ffmpeg(cmd)
+        
+        # Replace original with new file
+        import shutil
+        shutil.move(temp_output, output_path)
+        
+        return output_path
 
 
 # Singleton instance

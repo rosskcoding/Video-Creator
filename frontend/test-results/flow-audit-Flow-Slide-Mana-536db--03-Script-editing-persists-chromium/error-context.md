@@ -1,0 +1,253 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - link [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img [ref=e5]
+      - navigation [ref=e8]:
+        - link "Projects" [ref=e9] [cursor=pointer]:
+          - /url: /
+          - img [ref=e10]
+          - generic: Projects
+        - link "Workspace" [ref=e12] [cursor=pointer]:
+          - /url: /workspace
+          - img [ref=e13]
+          - generic: Workspace
+        - link "Jobs" [ref=e16] [cursor=pointer]:
+          - /url: /admin/jobs
+          - img [ref=e17]
+          - generic: Jobs
+        - link "Admin" [ref=e20] [cursor=pointer]:
+          - /url: /admin
+          - img [ref=e21]
+          - generic: Admin
+        - link "Help" [ref=e24] [cursor=pointer]:
+          - /url: /help
+          - img [ref=e25]
+          - generic: Help
+    - main [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - generic [ref=e31]:
+            - link "Back to Projects" [ref=e32] [cursor=pointer]:
+              - /url: /
+              - img [ref=e33]
+            - generic [ref=e35]:
+              - generic [ref=e36]: Test 2
+              - generic [ref=e37]: v1
+          - generic [ref=e38]:
+            - generic [ref=e39]:
+              - combobox [ref=e40]:
+                - option "Ukrainian"
+                - option "English" [selected]
+                - option "Arabic"
+              - img
+            - generic [ref=e41]: Ready
+            - button "Render (4/13)" [ref=e43] [cursor=pointer]:
+              - img [ref=e44]
+              - text: Render
+              - generic [ref=e47]: (4/13)
+              - img [ref=e48]
+            - button "Download 3" [ref=e51] [cursor=pointer]:
+              - img [ref=e52]
+              - text: Download
+              - generic [ref=e55]: "3"
+              - img [ref=e56]
+            - button "Quick Preview" [ref=e58] [cursor=pointer]:
+              - img [ref=e59]
+            - link "Translation Glossary" [ref=e61] [cursor=pointer]:
+              - /url: /projects/9f6c788c-5a04-42f2-ae14-a2115af762c5/glossary
+              - button "Translation Glossary" [ref=e62]:
+                - img [ref=e63]
+            - link "Audio & Render Settings" [ref=e65] [cursor=pointer]:
+              - /url: /projects/9f6c788c-5a04-42f2-ae14-a2115af762c5/settings
+              - button "Audio & Render Settings" [ref=e66]:
+                - img [ref=e67]
+        - generic [ref=e72]:
+          - button "Choose File" [ref=e73]
+          - complementary [ref=e74]:
+            - generic [ref=e76]:
+              - combobox [ref=e77]:
+                - option "All Slides" [selected]
+                - option "Needs Audio"
+                - option "Ready"
+              - img
+            - generic [ref=e78]:
+              - generic [ref=e82] [cursor=pointer]:
+                - button "Select slide 1" [ref=e83]
+                - img "Slide 1"
+                - generic [ref=e84]: "1"
+                - generic "Audio ready" [ref=e86]
+                - button "Drag to reorder" [ref=e87]:
+                  - img [ref=e88]
+                - button "More slide actions" [ref=e95]:
+                  - img [ref=e96]
+              - generic [ref=e103] [cursor=pointer]:
+                - button "Select slide 2" [ref=e104]
+                - img "Slide 2"
+                - generic [ref=e105]: "2"
+                - generic "Audio ready" [ref=e107]
+                - button "Drag to reorder" [ref=e108]:
+                  - img [ref=e109]
+                - button "More slide actions" [ref=e116]:
+                  - img [ref=e117]
+              - generic [ref=e124] [cursor=pointer]:
+                - button "Select slide 3" [ref=e125]
+                - img "Slide 3"
+                - generic [ref=e126]: "3"
+                - generic "Audio ready" [ref=e128]
+                - button "Drag to reorder" [ref=e129]:
+                  - img [ref=e130]
+                - button "More slide actions" [ref=e137]:
+                  - img [ref=e138]
+              - generic [ref=e145] [cursor=pointer]:
+                - button "Select slide 4" [ref=e146]
+                - img "Slide 4"
+                - generic [ref=e147]: "4"
+                - generic "Audio ready" [ref=e149]
+                - button "Drag to reorder" [ref=e150]:
+                  - img [ref=e151]
+                - button "More slide actions" [ref=e158]:
+                  - img [ref=e159]
+              - generic [ref=e166] [cursor=pointer]:
+                - button "Select slide 5" [ref=e167]
+                - img "Slide 5"
+                - generic [ref=e168]: "5"
+                - generic "Missing script" [ref=e170]
+                - button "Drag to reorder" [ref=e171]:
+                  - img [ref=e172]
+                - button "More slide actions" [ref=e179]:
+                  - img [ref=e180]
+              - generic [ref=e187] [cursor=pointer]:
+                - button "Select slide 6" [ref=e188]
+                - img "Slide 6"
+                - generic [ref=e189]: "6"
+                - generic "Missing script" [ref=e191]
+                - button "Drag to reorder" [ref=e192]:
+                  - img [ref=e193]
+                - button "More slide actions" [ref=e200]:
+                  - img [ref=e201]
+              - generic [ref=e208] [cursor=pointer]:
+                - button "Select slide 7" [ref=e209]
+                - img "Slide 7"
+                - generic [ref=e210]: "7"
+                - generic "Missing script" [ref=e212]
+                - button "Drag to reorder" [ref=e213]:
+                  - img [ref=e214]
+                - button "More slide actions" [ref=e221]:
+                  - img [ref=e222]
+              - generic [ref=e229] [cursor=pointer]:
+                - button "Select slide 8" [ref=e230]
+                - img "Slide 8"
+                - generic [ref=e231]: "8"
+                - generic "Missing script" [ref=e233]
+                - button "Drag to reorder" [ref=e234]:
+                  - img [ref=e235]
+                - button "More slide actions" [ref=e242]:
+                  - img [ref=e243]
+              - generic [ref=e250] [cursor=pointer]:
+                - button "Select slide 9" [ref=e251]
+                - img "Slide 9"
+                - generic [ref=e252]: "9"
+                - generic "Missing script" [ref=e254]
+                - button "Drag to reorder" [ref=e255]:
+                  - img [ref=e256]
+                - button "More slide actions" [ref=e263]:
+                  - img [ref=e264]
+              - generic [ref=e271] [cursor=pointer]:
+                - button "Select slide 10" [ref=e272]
+                - img "Slide 10"
+                - generic [ref=e273]: "10"
+                - generic "Missing script" [ref=e275]
+                - button "Drag to reorder" [ref=e276]:
+                  - img [ref=e277]
+                - button "More slide actions" [ref=e284]:
+                  - img [ref=e285]
+              - generic [ref=e292] [cursor=pointer]:
+                - button "Select slide 11" [ref=e293]
+                - img "Slide 11"
+                - generic [ref=e294]: "11"
+                - generic "Missing script" [ref=e296]
+                - button "Drag to reorder" [ref=e297]:
+                  - img [ref=e298]
+                - button "More slide actions" [ref=e305]:
+                  - img [ref=e306]
+              - generic [ref=e313] [cursor=pointer]:
+                - button "Select slide 12" [ref=e314]
+                - img "Slide 12"
+                - generic [ref=e315]: "12"
+                - generic "Missing script" [ref=e317]
+                - button "Drag to reorder" [ref=e318]:
+                  - img [ref=e319]
+                - button "More slide actions" [ref=e326]:
+                  - img [ref=e327]
+              - generic [ref=e334] [cursor=pointer]:
+                - button "Select slide 13" [ref=e335]
+                - img "Slide 13"
+                - generic [ref=e336]: "13"
+                - generic "Missing script" [ref=e338]
+                - button "Drag to reorder" [ref=e339]:
+                  - img [ref=e340]
+                - button "More slide actions" [ref=e347]:
+                  - img [ref=e348]
+              - status [ref=e352]
+            - generic [ref=e354] [cursor=pointer]:
+              - button "Choose File" [ref=e355]
+              - img [ref=e356]
+              - paragraph [ref=e360]: Add slide (PNG, JPG)
+          - main [ref=e361]:
+            - generic [ref=e363]:
+              - img "Slide 1" [ref=e364]
+              - button "Edit Canvas" [ref=e366] [cursor=pointer]:
+                - img [ref=e367]
+                - text: Edit Canvas
+            - generic [ref=e372]:
+              - generic [ref=e373]: "Estimated:"
+              - generic [ref=e374]: 0:26
+          - complementary [ref=e375]:
+            - generic [ref=e377]:
+              - generic [ref=e378]:
+                - button "UK" [ref=e379] [cursor=pointer]
+                - button "Remove language UK" [ref=e380] [cursor=pointer]:
+                  - img [ref=e381]
+              - button "EN" [ref=e385] [cursor=pointer]
+              - generic [ref=e386]:
+                - button "AR" [ref=e387] [cursor=pointer]
+                - button "Remove language AR" [ref=e388] [cursor=pointer]:
+                  - img [ref=e389]
+              - button "+ Add" [ref=e392] [cursor=pointer]
+              - generic [ref=e393]: Saving...
+            - generic [ref=e394]:
+              - textbox "Enter script for this slide..." [ref=e395]: Today, I will present the ESG Platform project — the first professional ESG rating for assessing the corporate sustainability of companies in Russia, Kazakhstan, and Ukraine, built on modern international practices and with a focus on investors. This project creates a bridge between regional businesses and the global responsible investment market.
+              - generic [ref=e396]:
+                - generic [ref=e397]: 349 characters
+                - generic [ref=e398]:
+                  - button "Markers" [ref=e399] [cursor=pointer]:
+                    - img [ref=e400]
+                    - text: Markers
+                  - generic [ref=e402]: ~0:20 voice time
+            - generic [ref=e404]:
+              - generic [ref=e405]:
+                - generic [ref=e406]: "Audio status:"
+                - generic [ref=e407]: 4/13 ready
+                - generic [ref=e409]: 9 no script
+              - generic [ref=e411]: ✓ OK to render with partial audio
+            - generic [ref=e412]:
+              - button "Import Notes" [ref=e413] [cursor=pointer]:
+                - img [ref=e414]
+                - text: Import Notes
+              - button "This Slide" [ref=e416] [cursor=pointer]:
+                - img [ref=e417]
+                - text: This Slide
+              - button "All Slides" [ref=e420] [cursor=pointer]:
+                - img [ref=e421]
+                - text: All Slides
+              - button "Preview" [ref=e424] [cursor=pointer]:
+                - img [ref=e425]
+                - text: Preview
+  - region "Notifications alt+T"
+  - alert [ref=e427]
+```

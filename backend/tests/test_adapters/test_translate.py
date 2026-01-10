@@ -73,6 +73,63 @@ class TestTranslateAdapter:
             system_prompt = call_args.kwargs["messages"][0]["content"]
             assert "KPI" in system_prompt
             assert "ESG" in system_prompt
+
+    @pytest.mark.asyncio
+    async def test_translate_preserves_marker_tokens(self, adapter):
+        """If input contains ⟦M:uuid⟧, prompt must instruct to preserve and metadata must reflect preservation."""
+        token = "⟦M:6f2c9f7a-1234-5678-9abc-def012345678⟧"
+        text = f"Hello {token} world"
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = f"Привет {token} мир"
+
+        with patch.object(
+            adapter.client.chat.completions,
+            "create",
+            new_callable=AsyncMock,
+            return_value=mock_response,
+        ) as mock_create:
+            translated, metadata = await adapter.translate(
+                text=text,
+                source_lang="en",
+                target_lang="ru",
+            )
+
+            assert token in translated
+            assert metadata["has_marker_tokens"] is True
+            assert metadata["markers_preserved"] is True
+            assert metadata["marker_count"] == 1
+
+            call_args = mock_create.call_args
+            system_prompt = call_args.kwargs["messages"][0]["content"]
+            assert "PRESERVE MARKER TOKENS" in system_prompt
+
+    @pytest.mark.asyncio
+    async def test_translate_detects_missing_marker_tokens(self, adapter):
+        """If translation drops tokens, metadata marks markers_preserved=False."""
+        token = "⟦M:6f2c9f7a-1234-5678-9abc-def012345678⟧"
+        text = f"Hello {token} world"
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "Привет мир"  # token lost
+
+        with patch.object(
+            adapter.client.chat.completions,
+            "create",
+            new_callable=AsyncMock,
+            return_value=mock_response,
+        ):
+            translated, metadata = await adapter.translate(
+                text=text,
+                source_lang="en",
+                target_lang="ru",
+            )
+
+            assert token not in translated
+            assert metadata["has_marker_tokens"] is True
+            assert metadata["markers_preserved"] is False
     
     @pytest.mark.asyncio
     async def test_translate_batch_single_text(self, adapter, mock_openai_response):

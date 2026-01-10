@@ -82,8 +82,8 @@ ENV_BACKUP=$(find "$TEMP_DIR" -name "*-env" | head -1)
 log_info "Stopping application services..."
 docker compose -f "$COMPOSE_FILE" stop api worker worker_convert frontend caddy || true
 
-# Source environment
-source "$ENV_FILE"
+# Parse environment safely (avoid RCE via malicious .env)
+POSTGRES_PASSWORD=$(grep -E '^POSTGRES_PASSWORD=' "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
 
 # Restore database
 if [ -f "$DB_BACKUP" ]; then

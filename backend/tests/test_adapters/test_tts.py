@@ -45,7 +45,7 @@ class TestTTSAdapter:
         """Test that different inputs produce different hashes"""
         hash1 = TTSAdapter.compute_audio_hash(
             text="Hello world",
-            voice_id="voice123",
+            voice_id="voice123",  # voice_id is ignored, uses hardcoded
             lang="en"
         )
         
@@ -55,9 +55,10 @@ class TestTTSAdapter:
             lang="en"
         )
         
+        # NOTE: voice_id is now hardcoded, so different voice param doesn't affect hash
         hash3 = TTSAdapter.compute_audio_hash(
             text="Hello world",
-            voice_id="voice456",  # Different voice
+            voice_id="voice456",  # Ignored - uses hardcoded voice
             lang="en"
         )
         
@@ -68,7 +69,8 @@ class TestTTSAdapter:
         )
         
         assert hash1 != hash2
-        assert hash1 != hash3
+        # hash1 == hash3 because voice_id is hardcoded (expected behavior)
+        assert hash1 == hash3  # Changed from != to == due to hardcoded voice
         assert hash1 != hash4
     
     def test_check_cache_no_file(self, adapter, tmp_path):
@@ -145,7 +147,7 @@ class TestTTSAdapter:
     
     @pytest.mark.asyncio
     async def test_generate_speech_with_custom_params(self, adapter, tmp_path):
-        """Test speech generation with custom voice and model"""
+        """Test speech generation with custom model (voice_id is hardcoded)"""
         output_path = tmp_path / "output.mp3"
         
         mock_response = [b"audio"]
@@ -161,7 +163,7 @@ class TestTTSAdapter:
             await adapter.generate_speech(
                 text="Hello",
                 output_path=output_path,
-                voice_id="custom_voice",
+                voice_id="custom_voice",  # This is ignored - hardcoded voice used
                 model="custom_model",
             )
             
@@ -170,7 +172,8 @@ class TestTTSAdapter:
             call_kwargs = mock_convert.call_args.kwargs
             
             assert call_kwargs["text"] == "Hello"
-            assert call_kwargs["voice_id"] == "custom_voice"
+            # voice_id is HARDCODED to iBcRJa9DRdlJlVihC0V6, custom_voice is ignored
+            assert call_kwargs["voice_id"] == "iBcRJa9DRdlJlVihC0V6"
             assert call_kwargs["model_id"] == "custom_model"
 
 

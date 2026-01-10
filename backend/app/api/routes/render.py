@@ -377,14 +377,14 @@ async def cancel_job(
         pass
     
     # Update job status
-    job.status = JobStatus.FAILED
+    job.status = JobStatus.CANCELLED
     job.error_message = "Cancelled by user"
     job.finished_at = datetime.utcnow()
     await db.commit()
     
     return {
         "id": str(job.id),
-        "status": "cancelled",
+        "status": job.status.value,
         "message": "Job has been cancelled",
         "files_cleaned": files_cleaned,
     }
@@ -461,7 +461,7 @@ async def cancel_all_project_jobs(
         except Exception:
             pass
 
-        job.status = JobStatus.FAILED
+        job.status = JobStatus.CANCELLED
         job.error_message = "Cancelled by user (project cancel)"
         job.finished_at = now
         cancelled_ids.append(str(job.id))

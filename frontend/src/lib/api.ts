@@ -54,14 +54,20 @@ client.interceptors.response.use(
           window.location.href = "/login";
         }
       } else if (error.response?.status === 403 && error.response?.data?.detail?.includes("CSRF")) {
-        // CSRF token issue - try to refresh it
+        // CSRF token issue - try to refresh it (only once to prevent infinite loop)
+        const originalRequest = error.config;
+        if (originalRequest._csrfRetry) {
+          // Already retried once, redirect to login
+          window.location.href = "/login";
+          return Promise.reject(error);
+        }
         try {
           const response = await axios.get(`${API_URL}/api/auth/csrf-token`, {
             withCredentials: true,
           });
           setCsrfToken(response.data.csrf_token);
-          // Retry the original request
-          const originalRequest = error.config;
+          // Mark as retried and retry the original request
+          originalRequest._csrfRetry = true;
           originalRequest.headers["X-CSRF-Token"] = response.data.csrf_token;
           return axios(originalRequest);
         } catch {
@@ -153,7 +159,8 @@ export interface ProjectVersion {
 export interface Slide {
   id: string;
   slide_index: number;
-  image_url: string;  // URL served by backend
+  image_url: string;  // URL served by backend (original slide)
+  preview_url?: string | null;  // URL for rendered preview with canvas layers
   notes_text: string | null;
   slide_hash: string | null;
 }
@@ -175,6 +182,8 @@ export interface SlideWithScripts extends Slide {
     voice_id: string;
     audio_url: string;  // URL served by backend
     duration_sec: number;
+    created_at?: string;
+    script_text_hash?: string;  // Hash of script used for TTS (for sync tracking)
   }[];
 }
 
@@ -193,6 +202,17 @@ export interface RenderJob {
   project_id?: string;
   project_name?: string;
   version_id?: string;
+}
+
+export interface RenderStartJob {
+  job_id: string;
+  task_id: string;
+  lang: string;
+}
+
+export interface RenderAllResponse {
+  jobs: RenderStartJob[];
+  languages_count: number;
 }
 
 export interface WorkspaceExport {
@@ -218,6 +238,8 @@ export interface AudioSettings {
   ducking_strength: string;
   target_lufs: number;
   voice_id: string | null;
+  music_fade_in_sec: number;
+  music_fade_out_sec: number;
   // Render/timing settings
   pre_padding_sec: number;
   post_padding_sec: number;
@@ -246,6 +268,156 @@ export interface TranslationRules {
   preferred_translations: { term: string; lang: string; translation: string }[];
   style: string;
   extra_rules: string | null;
+}
+
+// Canvas Editor Types
+export interface Position {
+  x: number;
+  y: number;
+}
+
+export interface Size {
+  width: number;
+  height: number;
+}
+
+export interface TextStyle {
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: "normal" | "bold";
+  fontStyle: "normal" | "italic";
+  color: string;
+  align: "left" | "center" | "right";
+  verticalAlign: "top" | "middle" | "bottom";
+  lineHeight: number;
+}
+
+export interface TextContent {
+  baseContent: string;
+  translations: Record<string, string>;
+  isTranslatable: boolean;
+  style?: Partial<TextStyle>;
+  overflow?: "shrinkFont" | "expandHeight" | "clip";
+  minFontSize?: number;
+}
+
+export interface ImageContent {
+  assetId: string;
+  assetUrl?: string;
+  fit?: "contain" | "cover" | "fill";
+}
+
+export interface PlateContent {
+  backgroundColor: string;
+  backgroundOpacity?: number;
+  borderRadius?: number;
+  border?: {
+    width: number;
+    color: string;
+    style: "solid" | "dashed";
+  };
+  accent?: {
+    position: "left" | "top" | "right" | "bottom";
+    width: number;
+    color: string;
+  };
+  padding?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
+}
+
+export interface AnimationTrigger {
+  type: "time" | "marker" | "start" | "end" | "word";
+  seconds?: number;
+  markerId?: string;
+  offsetSeconds?: number;
+  charStart?: number;
+  charEnd?: number;
+  wordText?: string;
+}
+
+export interface AnimationConfig {
+  type: "fadeIn" | "fadeOut" | "slideLeft" | "slideRight" | "slideUp" | "slideDown" | "none";
+  duration: number;
+  delay: number;
+  easing: "linear" | "easeIn" | "easeOut" | "easeInOut";
+  trigger: AnimationTrigger;
+}
+
+export interface LayerAnimation {
+  entrance?: AnimationConfig;
+  exit?: AnimationConfig;
+}
+
+export interface SlideLayer {
+  id: string;
+  type: "text" | "image" | "plate";
+  name: string;
+  position: Position;
+  size: Size;
+  anchor?: string;
+  rotation?: number;
+  opacity?: number;
+  visible: boolean;
+  locked: boolean;
+  zIndex: number;
+  groupId?: string;
+  text?: TextContent;
+  image?: ImageContent;
+  plate?: PlateContent;
+  animation?: LayerAnimation;
+}
+
+export interface CanvasSettings {
+  width: number;
+  height: number;
+}
+
+export interface SlideScene {
+  id: string;
+  slide_id: string;
+  canvas: CanvasSettings;
+  layers: SlideLayer[];
+  schema_version: number;
+  render_key: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Marker {
+  id: string;
+  name?: string;
+  charStart: number;
+  charEnd: number;
+  wordText: string;
+  timeSeconds?: number;
+}
+
+export interface SlideMarkers {
+  id: string;
+  slide_id: string;
+  lang: string;
+  markers: Marker[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Asset {
+  id: string;
+  project_id: string;
+  type: "image" | "background" | "icon";
+  filename: string;
+  file_path: string;
+  thumbnail_path?: string;
+  width?: number;
+  height?: number;
+  file_size?: number;
+  url: string;
+  thumbnail_url?: string;
+  created_at: string;
 }
 
 // API functions
@@ -287,6 +459,19 @@ export const api = {
     return data;
   },
 
+  // DEV helper: upload media by server-side path (avoids OS file picker limitations in automation)
+  async uploadMediaFromPath(
+    projectId: string,
+    path: string,
+    comment?: string
+  ): Promise<{ version_id: string; file_type: string }> {
+    const { data } = await client.post(`/projects/${projectId}/upload_from_path`, {
+      path,
+      comment,
+    });
+    return data;
+  },
+
   // Legacy alias
   async uploadPPTX(projectId: string, file: File, comment?: string): Promise<{ version_id: string }> {
     return this.uploadMedia(projectId, file, comment);
@@ -295,6 +480,11 @@ export const api = {
   // Versions
   async getVersions(projectId: string): Promise<ProjectVersion[]> {
     const { data } = await client.get(`/projects/${projectId}/versions`);
+    return data;
+  },
+
+  async ensureCurrentVersion(projectId: string): Promise<ProjectVersion> {
+    const { data } = await client.post(`/projects/${projectId}/versions/ensure`);
     return data;
   },
 
@@ -353,8 +543,11 @@ export const api = {
     await client.post(`/slides/projects/${projectId}/versions/${versionId}/languages/remove?lang=${lang}`);
   },
 
-  async importNotes(projectId: string, versionId: string, lang: string = "en"): Promise<void> {
-    await client.post(`/slides/projects/${projectId}/versions/${versionId}/import_notes?lang=${lang}`);
+  async importNotes(projectId: string, versionId: string, lang: string = "en"): Promise<{ lang: string; imported_count: number }> {
+    const { data } = await client.post(
+      `/slides/projects/${projectId}/versions/${versionId}/import_notes?lang=${lang}`
+    );
+    return data;
   },
 
   async translateAll(projectId: string, versionId: string, targetLang: string): Promise<{ task_id: string; slide_count: number }> {
@@ -394,7 +587,7 @@ export const api = {
     return data;
   },
 
-  async renderAll(projectId: string, versionId: string): Promise<{ jobs: RenderJob[] }> {
+  async renderAll(projectId: string, versionId: string): Promise<RenderAllResponse> {
     const { data } = await client.post(
       `/render/projects/${projectId}/versions/${versionId}/render_all`
     );
@@ -508,5 +701,109 @@ export const api = {
   getMusicUrl(projectId: string): string {
     if (!projectId) return "";
     return `${API_URL}/static/music/${projectId}/corporate.mp3`;
+  },
+
+  // ==================== CANVAS EDITOR API ====================
+
+  // Scene CRUD
+  async getSlideScene(slideId: string): Promise<SlideScene> {
+    const { data } = await client.get(`/canvas/slides/${slideId}/scene`);
+    return data;
+  },
+
+  async updateSlideScene(slideId: string, scene: { canvas?: CanvasSettings; layers?: SlideLayer[] }): Promise<SlideScene> {
+    const { data } = await client.put(`/canvas/slides/${slideId}/scene`, scene);
+    return data;
+  },
+
+  async generateSlidePreview(slideId: string, lang: string = "en"): Promise<{ success: boolean; preview_url: string; slide_id: string }> {
+    const { data } = await client.post(`/canvas/slides/${slideId}/preview?lang=${lang}`);
+    return data;
+  },
+
+  async addLayer(slideId: string, layer: Partial<SlideLayer>): Promise<SlideScene> {
+    const { data } = await client.post(`/canvas/slides/${slideId}/scene/layers`, layer);
+    return data;
+  },
+
+  async updateLayer(slideId: string, layerId: string, layer: Partial<SlideLayer>): Promise<SlideScene> {
+    const { data } = await client.put(`/canvas/slides/${slideId}/scene/layers/${layerId}`, layer);
+    return data;
+  },
+
+  async deleteLayer(slideId: string, layerId: string): Promise<SlideScene> {
+    const { data } = await client.delete(`/canvas/slides/${slideId}/scene/layers/${layerId}`);
+    return data;
+  },
+
+  async reorderLayers(slideId: string, layerIds: string[]): Promise<{ status: string; layers_count: number }> {
+    const { data } = await client.put(`/canvas/slides/${slideId}/scene/layers/reorder`, { layer_ids: layerIds });
+    return data;
+  },
+
+  // Markers
+  async getSlideMarkers(slideId: string, lang: string): Promise<SlideMarkers> {
+    const { data } = await client.get(`/canvas/slides/${slideId}/markers/${lang}`);
+    return data;
+  },
+
+  async updateSlideMarkers(slideId: string, lang: string, markers: Marker[]): Promise<SlideMarkers> {
+    const { data } = await client.put(`/canvas/slides/${slideId}/markers/${lang}`, { markers });
+    return data;
+  },
+
+  // Assets
+  async getProjectAssets(projectId: string, type?: string): Promise<{ assets: Asset[]; total: number }> {
+    const params = type ? `?type=${type}` : "";
+    const { data } = await client.get(`/canvas/projects/${projectId}/assets${params}`);
+    return data;
+  },
+
+  async uploadAsset(projectId: string, file: File, type: "image" | "background" | "icon" = "image"): Promise<Asset> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const { data } = await client.post(`/canvas/projects/${projectId}/assets?type=${type}`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+  },
+
+  async deleteAsset(assetId: string): Promise<void> {
+    await client.delete(`/canvas/assets/${assetId}`);
+  },
+
+  // Translate scene text layers
+  async translateSceneLayers(
+    slideId: string,
+    targetLang: string
+  ): Promise<{ translated_count: number; target_lang: string; layers_updated: string[] }> {
+    const { data } = await client.post(`/canvas/slides/${slideId}/scene/translate`, {
+      target_lang: targetLang,
+    });
+    return data;
+  },
+
+  // Get scene with resolved word triggers (converted to time-based)
+  async getResolvedScene(
+    slideId: string,
+    lang: string
+  ): Promise<{
+    id: string;
+    slide_id: string;
+    canvas: CanvasSettings;
+    layers: SlideLayer[];
+    lang: string;
+    triggers_resolved: number;
+    schema_version: number;
+    render_key: string | null;
+  }> {
+    const { data } = await client.get(`/canvas/slides/${slideId}/scene/resolved?lang=${lang}`);
+    return data;
+  },
+
+  // Asset URL helper
+  getAssetUrl(url: string): string {
+    if (!url) return "";
+    return `${API_URL}${url}`;
   },
 };

@@ -51,6 +51,11 @@ class ProjectUpdate(BaseModel):
     base_language: Optional[str] = None
 
 
+class UploadPathRequest(BaseModel):
+    path: str
+    comment: Optional[str] = None
+
+
 class AudioSettingsUpdate(BaseModel):
     # Audio settings
     background_music_enabled: Optional[bool] = None
@@ -60,6 +65,8 @@ class AudioSettingsUpdate(BaseModel):
     ducking_strength: Optional[str] = None
     target_lufs: Optional[int] = None
     voice_id: Optional[str] = None  # ElevenLabs voice ID
+    music_fade_in_sec: Optional[float] = None
+    music_fade_out_sec: Optional[float] = None
     # Render/timing settings
     pre_padding_sec: Optional[float] = None
     post_padding_sec: Optional[float] = None
@@ -474,6 +481,108 @@ async def upload_media(
     }
 
 
+@router.post("/{project_id}/upload_from_path")
+async def upload_media_from_path(
+    project_id: uuid.UUID,
+    data: UploadPathRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    DEV helper: upload a media file by server-side path instead of browser file picker.
+
+    This exists to support automated E2E flows where the OS file picker cannot be controlled.
+    Enabled only when ENV=dev.
+    """
+    if settings.ENV != "dev":
+        raise HTTPException(status_code=404, detail="Not found")
+
+    source_path = Path(data.path).expanduser()
+    try:
+        source_path = source_path.resolve()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    if not source_path.exists() or not source_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_ext = source_path.suffix.lower()
+    if file_ext not in SUPPORTED_EXTENSIONS:
+        allowed = ", ".join(SUPPORTED_EXTENSIONS.keys())
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type: {file_ext}. Allowed: {allowed}",
+        )
+
+    try:
+        total_size = source_path.stat().st_size
+    except Exception:
+        raise HTTPException(status_code=400, detail="Cannot read file size")
+
+    if total_size > MAX_MEDIA_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {MAX_MEDIA_SIZE // (1024*1024)} MB",
+        )
+
+    # Verify project exists
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get next version number
+    result = await db.execute(
+        select(ProjectVersion)
+        .where(ProjectVersion.project_id == project_id)
+        .order_by(ProjectVersion.version_number.desc())
+        .limit(1)
+    )
+    latest_version = result.scalar_one_or_none()
+    next_version = (latest_version.version_number + 1) if latest_version else 1
+
+    # Create version record
+    version = ProjectVersion(
+        project_id=project_id,
+        version_number=next_version,
+        status=ProjectStatus.DRAFT,
+        comment=data.comment,
+    )
+    db.add(version)
+    await db.flush()  # Get version ID
+
+    # Save file to version dir
+    version_dir = settings.DATA_DIR / str(project_id) / "versions" / str(version.id)
+    version_dir.mkdir(parents=True, exist_ok=True)
+    input_path = version_dir / f"input{file_ext}"
+
+    try:
+        shutil.copyfile(source_path, input_path)
+    except Exception as e:
+        # Best-effort cleanup
+        try:
+            input_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"Failed to copy file: {e}")
+
+    # Store relative path in DB (using existing pptx_asset_path field for any media)
+    version.pptx_asset_path = to_relative_path(input_path)
+
+    # Update project current version
+    project.current_version_id = version.id
+
+    await db.commit()
+    await db.refresh(version)
+
+    return {
+        "version_id": str(version.id),
+        "version_number": version.version_number,
+        "file_type": file_ext,
+        "status": "uploaded",
+        "message": "File uploaded. Call /convert to process slides.",
+    }
+
+
 # Legacy endpoint for backward compatibility
 @router.post("/{project_id}/upload_pptx")
 async def upload_pptx(
@@ -510,6 +619,83 @@ async def list_versions(project_id: uuid.UUID, db: AsyncSession = Depends(get_db
         )
         for v in versions
     ]
+
+
+@router.post("/{project_id}/versions/ensure", response_model=VersionResponse)
+async def ensure_current_version(
+    project_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Ensure the project has a current version suitable for manual slide additions.
+
+    - If `project.current_version_id` exists and is READY, returns it.
+    - If missing, creates a new READY version (vN) with no uploaded media.
+
+    This enables workflows like: create project -> enter project -> drag/drop images to add slides.
+    """
+    # Verify project exists
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # If current version exists, return it (but require READY)
+    if project.current_version_id:
+        ver_result = await db.execute(
+            select(ProjectVersion)
+            .where(ProjectVersion.id == project.current_version_id)
+            .where(ProjectVersion.project_id == project_id)
+        )
+        current = ver_result.scalar_one_or_none()
+        if current:
+            if current.status != ProjectStatus.READY:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Current version is not ready (status={current.status.value}). Please wait for conversion to finish.",
+                )
+            return VersionResponse(
+                id=current.id,
+                version_number=current.version_number,
+                status=current.status.value,
+                pptx_asset_path=current.pptx_asset_path,
+                slides_hash=current.slides_hash,
+                comment=current.comment,
+                created_at=current.created_at.isoformat(),
+            )
+
+    # Create new READY version
+    latest_result = await db.execute(
+        select(ProjectVersion)
+        .where(ProjectVersion.project_id == project_id)
+        .order_by(ProjectVersion.version_number.desc())
+        .limit(1)
+    )
+    latest_version = latest_result.scalar_one_or_none()
+    next_version = (latest_version.version_number + 1) if latest_version else 1
+
+    version = ProjectVersion(
+        project_id=project_id,
+        version_number=next_version,
+        status=ProjectStatus.READY,
+        comment="Manual slides",
+    )
+    db.add(version)
+    await db.flush()  # get version.id
+
+    project.current_version_id = version.id
+    await db.commit()
+    await db.refresh(version)
+
+    return VersionResponse(
+        id=version.id,
+        version_number=version.version_number,
+        status=version.status.value,
+        pptx_asset_path=version.pptx_asset_path,
+        slides_hash=version.slides_hash,
+        comment=version.comment,
+        created_at=version.created_at.isoformat(),
+    )
 
 
 @router.post("/{project_id}/versions/{version_id}/convert")
@@ -606,11 +792,18 @@ async def update_audio_settings(
     if data.ducking_enabled is not None:
         settings_obj.ducking_enabled = data.ducking_enabled
     if data.ducking_strength is not None:
-        settings_obj.ducking_strength = DuckingStrength(data.ducking_strength)
+        try:
+            settings_obj.ducking_strength = DuckingStrength(data.ducking_strength)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid ducking_strength: {data.ducking_strength}")
     if data.target_lufs is not None:
         settings_obj.target_lufs = data.target_lufs
     if data.voice_id is not None:
         settings_obj.voice_id = data.voice_id
+    if data.music_fade_in_sec is not None:
+        settings_obj.music_fade_in_sec = data.music_fade_in_sec
+    if data.music_fade_out_sec is not None:
+        settings_obj.music_fade_out_sec = data.music_fade_out_sec
     
     # Render/timing settings
     if data.pre_padding_sec is not None:
@@ -622,7 +815,10 @@ async def update_audio_settings(
     if data.last_slide_hold_sec is not None:
         settings_obj.last_slide_hold_sec = data.last_slide_hold_sec
     if data.transition_type is not None:
-        settings_obj.transition_type = TransitionType(data.transition_type)
+        try:
+            settings_obj.transition_type = TransitionType(data.transition_type)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid transition_type: {data.transition_type}")
     if data.transition_duration_sec is not None:
         settings_obj.transition_duration_sec = data.transition_duration_sec
     

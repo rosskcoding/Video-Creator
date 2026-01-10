@@ -1,0 +1,92 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - link [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img [ref=e5]
+      - navigation [ref=e8]:
+        - link "Projects" [ref=e9] [cursor=pointer]:
+          - /url: /
+          - img [ref=e10]
+          - generic: Projects
+        - link "Workspace" [ref=e12] [cursor=pointer]:
+          - /url: /workspace
+          - img [ref=e13]
+          - generic: Workspace
+        - link "Jobs" [ref=e16] [cursor=pointer]:
+          - /url: /admin/jobs
+          - img [ref=e17]
+          - generic: Jobs
+        - link "Admin" [ref=e20] [cursor=pointer]:
+          - /url: /admin
+          - img [ref=e21]
+          - generic: Admin
+        - link "Help" [ref=e24] [cursor=pointer]:
+          - /url: /help
+          - img [ref=e25]
+          - generic: Help
+    - main [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e31]:
+          - heading "Projects" [level=1] [ref=e32]
+          - generic [ref=e33]:
+            - generic [ref=e34]:
+              - img [ref=e35]
+              - textbox "Search projects..." [active] [ref=e38]: Test
+            - button "New Project" [ref=e39] [cursor=pointer]:
+              - img [ref=e40]
+              - text: New Project
+        - main [ref=e41]:
+          - generic [ref=e42]:
+            - 'link "Test 2 Base: EN Ready 13 slides 3 languages Updated 1d ago" [ref=e44] [cursor=pointer]':
+              - /url: /projects/9f6c788c-5a04-42f2-ae14-a2115af762c5
+              - generic [ref=e45]:
+                - generic [ref=e46]:
+                  - generic [ref=e47]:
+                    - img [ref=e49]
+                    - generic [ref=e53]:
+                      - heading "Test 2" [level=3] [ref=e54]
+                      - paragraph [ref=e55]: "Base: EN"
+                  - generic [ref=e56]:
+                    - generic [ref=e57]: Ready
+                    - button [ref=e58]:
+                      - img [ref=e59]
+                - generic [ref=e63]:
+                  - generic [ref=e64]:
+                    - img [ref=e65]
+                    - text: 13 slides
+                  - generic [ref=e69]:
+                    - img [ref=e70]
+                    - text: 3 languages
+                - generic [ref=e74]:
+                  - img [ref=e75]
+                  - generic [ref=e78]: Updated 1d ago
+            - 'link "Test Base: EN Ready 12 slides 3 languages Updated 1d ago" [ref=e80] [cursor=pointer]':
+              - /url: /projects/06d99e57-510d-44eb-9a70-229830a532d9
+              - generic [ref=e81]:
+                - generic [ref=e82]:
+                  - generic [ref=e83]:
+                    - img [ref=e85]
+                    - generic [ref=e89]:
+                      - heading "Test" [level=3] [ref=e90]
+                      - paragraph [ref=e91]: "Base: EN"
+                  - generic [ref=e92]:
+                    - generic [ref=e93]: Ready
+                    - button [ref=e94]:
+                      - img [ref=e95]
+                - generic [ref=e99]:
+                  - generic [ref=e100]:
+                    - img [ref=e101]
+                    - text: 12 slides
+                  - generic [ref=e105]:
+                    - img [ref=e106]
+                    - text: 3 languages
+                - generic [ref=e110]:
+                  - img [ref=e111]
+                  - generic [ref=e114]: Updated 1d ago
+  - region "Notifications alt+T"
+  - alert [ref=e115]
+```

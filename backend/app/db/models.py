@@ -31,6 +31,13 @@ class ScriptSource(str, Enum):
     TRANSLATED = "translated"
 
 
+class MarkerSource(str, Enum):
+    """Source of marker creation for audit purposes"""
+    MANUAL = "manual"      # User explicitly created marker
+    WORDCLICK = "wordclick"  # Created from word selection in UI
+    AUTO = "auto"          # Auto-generated during migration
+
+
 class JobType(str, Enum):
     CONVERT = "convert"
     TTS = "tts"
@@ -43,6 +50,7 @@ class JobStatus(str, Enum):
     RUNNING = "running"
     DONE = "done"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class DuckingStrength(str, Enum):
@@ -77,6 +85,7 @@ class Project(Base):
     audio_settings: Mapped[Optional["ProjectAudioSettings"]] = relationship(back_populates="project", uselist=False, cascade="all, delete-orphan")
     translation_rules: Mapped[Optional["ProjectTranslationRules"]] = relationship(back_populates="project", uselist=False, cascade="all, delete-orphan")
     audio_assets: Mapped[List["AudioAsset"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    assets: Mapped[List["Asset"]] = relationship(back_populates="project", cascade="all, delete-orphan")
 
 
 class ProjectVersion(Base):
@@ -107,6 +116,7 @@ class Slide(Base):
     version_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("project_versions.id"), nullable=False)
     slide_index: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-based
     image_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    preview_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # Rendered preview with canvas layers
     notes_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # From PPT speaker notes
     slide_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -115,6 +125,11 @@ class Slide(Base):
     version: Mapped["ProjectVersion"] = relationship(back_populates="slides")
     scripts: Mapped[List["SlideScript"]] = relationship(back_populates="slide", cascade="all, delete-orphan")
     audio_files: Mapped[List["SlideAudio"]] = relationship(back_populates="slide", cascade="all, delete-orphan")
+    # Canvas editor relationships
+    scene: Mapped[Optional["SlideScene"]] = relationship(back_populates="slide", uselist=False, cascade="all, delete-orphan")
+    markers_data: Mapped[List["SlideMarkers"]] = relationship(back_populates="slide", cascade="all, delete-orphan")
+    normalized_scripts: Mapped[List["NormalizedScript"]] = relationship(back_populates="slide", cascade="all, delete-orphan")
+    global_markers: Mapped[List["GlobalMarker"]] = relationship(back_populates="slide", cascade="all, delete-orphan")
 
 
 class SlideScript(Base):
@@ -127,6 +142,7 @@ class SlideScript(Base):
     text: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[ScriptSource] = mapped_column(SQLEnum(ScriptSource), default=ScriptSource.MANUAL)
     translation_meta_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    needs_retranslate: Mapped[bool] = mapped_column(Boolean, default=False)  # Flag for marker migration
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
@@ -145,6 +161,7 @@ class SlideAudio(Base):
     audio_path: Mapped[str] = mapped_column(String(500), nullable=False)
     duration_sec: Mapped[float] = mapped_column(Float, nullable=False)
     audio_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # For cache validation
+    script_text_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # Hash of script used for TTS
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -187,6 +204,9 @@ class ProjectAudioSettings(Base):
     ducking_strength: Mapped[DuckingStrength] = mapped_column(SQLEnum(DuckingStrength), default=DuckingStrength.DEFAULT)
     target_lufs: Mapped[int] = mapped_column(Integer, default=-14)
     voice_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # ElevenLabs voice ID
+    # Music fade in/out
+    music_fade_in_sec: Mapped[float] = mapped_column(Float, default=2.0)
+    music_fade_out_sec: Mapped[float] = mapped_column(Float, default=3.0)
     
     # Render/timing settings
     pre_padding_sec: Mapped[float] = mapped_column(Float, default=3.0)
@@ -243,4 +263,155 @@ class RenderJob(Base):
 
     # Relationships
     version: Mapped["ProjectVersion"] = relationship(back_populates="render_jobs")
+
+
+# === CANVAS EDITOR MODELS ===
+
+class AssetType(str, Enum):
+    IMAGE = "image"
+    BACKGROUND = "background"
+    ICON = "icon"
+
+
+class SlideScene(Base):
+    """Canvas scene data for a slide (layers, positions, animations)"""
+    __tablename__ = "slide_scenes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slide_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("slides.id", ondelete="CASCADE"), nullable=False, unique=True)
+    canvas_width: Mapped[int] = mapped_column(Integer, default=1920)
+    canvas_height: Mapped[int] = mapped_column(Integer, default=1080)
+    layers: Mapped[list] = mapped_column(JSON, default=list)  # List of SlideLayer objects
+    schema_version: Mapped[int] = mapped_column(Integer, default=1)
+    render_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # Hash for cache
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    slide: Mapped["Slide"] = relationship(back_populates="scene")
+
+
+class SlideMarkers(Base):
+    """Markers for animation triggers (per slide per language)"""
+    __tablename__ = "slide_markers"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slide_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("slides.id", ondelete="CASCADE"), nullable=False)
+    lang: Mapped[str] = mapped_column(String(10), nullable=False)
+    markers: Mapped[list] = mapped_column(JSON, default=list)  # List of Marker objects
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    slide: Mapped["Slide"] = relationship(back_populates="markers_data")
+
+
+class NormalizedScript(Base):
+    """Normalized script text with word timings from TTS"""
+    __tablename__ = "normalized_scripts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slide_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("slides.id", ondelete="CASCADE"), nullable=False)
+    lang: Mapped[str] = mapped_column(String(10), nullable=False)
+    raw_text: Mapped[str] = mapped_column(Text, default="")
+    normalized_text: Mapped[str] = mapped_column(Text, default="")
+    tokenization_version: Mapped[int] = mapped_column(Integer, default=1)
+    word_timings: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # [{charStart, charEnd, startTime, endTime, word}]
+    contains_marker_tokens: Mapped[bool] = mapped_column(Boolean, default=False)  # Has ⟦M:uuid⟧ tokens
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    slide: Mapped["Slide"] = relationship(back_populates="normalized_scripts")
+
+
+class GlobalMarker(Base):
+    """
+    Global marker for animation triggers (one per slide, independent of language).
+    
+    Each GlobalMarker has a unique ID that is referenced by:
+    - Animation triggers in layers (trigger.markerId)
+    - Marker tokens in script text (⟦M:uuid⟧)
+    - MarkerPosition records for each language
+    """
+    __tablename__ = "global_markers"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slide_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("slides.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Optional human-readable name
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    slide: Mapped["Slide"] = relationship(back_populates="global_markers")
+    positions: Mapped[List["MarkerPosition"]] = relationship(back_populates="marker", cascade="all, delete-orphan")
+
+
+class MarkerPosition(Base):
+    """
+    Position and timing of a marker in a specific language.
+    
+    Each GlobalMarker can have one MarkerPosition per language.
+    The position (char_start/end) is relative to the normalized script text.
+    The time_seconds is populated after TTS generation.
+    """
+    __tablename__ = "marker_positions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    marker_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("global_markers.id", ondelete="CASCADE"), nullable=False)
+    lang: Mapped[str] = mapped_column(String(10), nullable=False)
+    char_start: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Position in normalized text
+    char_end: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    time_seconds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Populated after TTS
+    source: Mapped[MarkerSource] = mapped_column(SQLEnum(MarkerSource), default=MarkerSource.MANUAL)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    marker: Mapped["GlobalMarker"] = relationship(back_populates="positions")
+
+
+class RenderCache(Base):
+    """
+    Cache for rendered video segments (EPIC B).
+    
+    Stores rendered slide segments to avoid re-rendering when the scene hasn't changed.
+    Cache key is: slide_id + lang + render_key + fps + resolution + renderer_version
+    """
+    __tablename__ = "render_cache"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slide_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("slides.id", ondelete="CASCADE"), nullable=False)
+    lang: Mapped[str] = mapped_column(String(10), nullable=False)
+    render_key: Mapped[str] = mapped_column(String(64), nullable=False)  # Hash of scene content
+    fps: Mapped[int] = mapped_column(Integer, default=30)
+    width: Mapped[int] = mapped_column(Integer, default=1920)
+    height: Mapped[int] = mapped_column(Integer, default=1080)
+    renderer_version: Mapped[str] = mapped_column(String(20), default="1.0")
+    segment_path: Mapped[str] = mapped_column(String(500), nullable=False)  # Path to cached mp4/webm
+    duration_sec: Mapped[float] = mapped_column(Float, nullable=False)
+    frame_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    render_time_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # How long render took
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_accessed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Asset(Base):
+    """Project assets (images, backgrounds, icons for canvas)"""
+    __tablename__ = "assets"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)  # image, background, icon
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    thumbnail_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    project: Mapped["Project"] = relationship(back_populates="assets")
 

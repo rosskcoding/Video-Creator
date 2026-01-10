@@ -43,8 +43,9 @@ echo "  Video-Creator Backup"
 echo "============================================"
 echo ""
 
-# Source environment for database password
-source "$ENV_FILE"
+# Parse environment safely (avoid RCE via malicious .env)
+# We only need POSTGRES_PASSWORD for this script
+POSTGRES_PASSWORD=$(grep -E '^POSTGRES_PASSWORD=' "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
 
 # Backup PostgreSQL database
 log_info "Backing up PostgreSQL database..."
@@ -59,10 +60,12 @@ docker run --rm \
     alpine tar czf "/backup/${BACKUP_NAME}-uploads.tar.gz" -C /data .
 log_success "Uploads backed up"
 
-# Backup environment file (encrypted)
-log_info "Backing up environment file..."
+# Backup environment file (plaintext - handle with care!)
+# WARNING: This contains sensitive secrets. Ensure backup storage is secure.
+log_info "Backing up environment file (plaintext)..."
 cp "$ENV_FILE" "${BACKUP_DIR}/${BACKUP_NAME}-env"
-log_success "Environment backed up"
+chmod 600 "${BACKUP_DIR}/${BACKUP_NAME}-env"
+log_warning "Environment file backed up as PLAINTEXT. Consider encrypting with 'age' or 'gpg' for off-site storage."
 
 # Create combined archive
 log_info "Creating combined archive..."

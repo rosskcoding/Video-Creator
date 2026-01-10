@@ -77,3 +77,36 @@ export function formatRelativeTime(dateString: string): string {
     minute: "2-digit"
   });
 }
+
+/**
+ * Compute SHA-256 hash of script text (first 32 chars).
+ * Must match backend algorithm in tasks.py for sync tracking.
+ */
+export async function computeScriptHash(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+  return hashHex.slice(0, 32);  // First 32 chars to match backend
+}
+
+/**
+ * Audio sync status with current script
+ */
+export type AudioSyncStatus = "synced" | "outdated" | "no_audio";
+
+/**
+ * Check if audio is in sync with the current script text.
+ * Returns sync status based on hash comparison.
+ */
+export async function checkAudioSyncStatus(
+  scriptText: string | undefined,
+  audioScriptHash: string | undefined
+): Promise<AudioSyncStatus> {
+  if (!audioScriptHash) return "no_audio";
+  if (!scriptText) return "no_audio";
+  
+  const currentHash = await computeScriptHash(scriptText);
+  return currentHash === audioScriptHash ? "synced" : "outdated";
+}

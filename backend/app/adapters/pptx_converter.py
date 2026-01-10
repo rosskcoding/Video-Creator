@@ -109,7 +109,10 @@ class PPTXConverter:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        await process.communicate()
+        stdout, stderr = await process.communicate()
+        
+        if process.returncode != 0:
+            raise RuntimeError(f"pdftoppm conversion failed: {stderr.decode()}")
         
         # pdftoppm creates files like: slide-1.png, slide-2.png, ...
         # Rename to: 001.png, 002.png, ...

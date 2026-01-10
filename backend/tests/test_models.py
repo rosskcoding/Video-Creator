@@ -11,6 +11,7 @@ from sqlalchemy import select
 from app.db.models import (
     Project, ProjectVersion, ProjectAudioSettings, ProjectTranslationRules,
     Slide, SlideScript, SlideAudio, AudioAsset, RenderJob,
+    GlobalMarker, MarkerPosition, MarkerSource, RenderCache,
     ProjectStatus, ScriptSource, JobType, JobStatus, DuckingStrength, TranslationStyle
 )
 
@@ -160,6 +161,62 @@ class TestSlideModel:
         
         assert len(slides) == 3
         assert [s.slide_index for s in slides] == [1, 2, 3]
+
+
+class TestGlobalMarkerModel:
+    """Tests for EPIC A marker models"""
+
+    @pytest.mark.asyncio
+    async def test_create_global_marker_and_position(self, db_session: AsyncSession, sample_slide: Slide):
+        gm = GlobalMarker(slide_id=sample_slide.id, name="Anchor")
+        db_session.add(gm)
+        await db_session.commit()
+        await db_session.refresh(gm)
+
+        assert gm.id is not None
+        assert gm.slide_id == sample_slide.id
+
+        pos = MarkerPosition(
+            marker_id=gm.id,
+            lang="en",
+            char_start=0,
+            char_end=5,
+            time_seconds=1.25,
+            source=MarkerSource.WORDCLICK,
+        )
+        db_session.add(pos)
+        await db_session.commit()
+        await db_session.refresh(pos)
+
+        assert pos.marker_id == gm.id
+        assert pos.lang == "en"
+        assert pos.time_seconds == pytest.approx(1.25)
+
+
+class TestRenderCacheModel:
+    """Tests for EPIC B render cache model"""
+
+    @pytest.mark.asyncio
+    async def test_create_render_cache_entry(self, db_session: AsyncSession, sample_slide: Slide):
+        entry = RenderCache(
+            slide_id=sample_slide.id,
+            lang="en",
+            render_key="rk",
+            segment_path="cache/segment.webm",
+            duration_sec=3.0,
+            frame_count=90,
+            fps=30,
+            width=1920,
+            height=1080,
+            renderer_version="2.0",
+        )
+        db_session.add(entry)
+        await db_session.commit()
+        await db_session.refresh(entry)
+
+        assert entry.id is not None
+        assert entry.slide_id == sample_slide.id
+        assert entry.duration_sec == pytest.approx(3.0)
 
 
 class TestSlideScriptModel:

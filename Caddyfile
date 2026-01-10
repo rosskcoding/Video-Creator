@@ -13,10 +13,15 @@
         X-Frame-Options "SAMEORIGIN"
         # Prevent MIME type sniffing
         X-Content-Type-Options "nosniff"
-        # XSS protection
-        X-XSS-Protection "1; mode=block"
         # Referrer policy
         Referrer-Policy "strict-origin-when-cross-origin"
+        # Content Security Policy - adjust as needed for your app
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:; media-src 'self' blob:; frame-ancestors 'self'"
+        # Permissions Policy - restrict browser features
+        Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+        # Cross-Origin policies
+        Cross-Origin-Opener-Policy "same-origin"
+        Cross-Origin-Embedder-Policy "credentialless"
         # Remove server header
         -Server
     }

@@ -129,14 +129,14 @@ export function PreviewPlayer({ slides, lang, onClose }: PreviewPlayerProps) {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isPlaying, currentSlideIdx]);
+  }, [isPlaying, currentSlideIdx, goToNextSlide, playCurrentSlideAudio, timeline, totalDuration]);
 
   // Play audio when slide changes during playback
   useEffect(() => {
     if (isPlaying) {
       playCurrentSlideAudio();
     }
-  }, [currentSlideIdx, isPlaying]);
+  }, [currentSlideIdx, isPlaying, playCurrentSlideAudio]);
 
   // Update volume
   useEffect(() => {

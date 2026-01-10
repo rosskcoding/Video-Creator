@@ -13,22 +13,33 @@ from typing import Optional
 from app.core.config import settings
 
 
-def to_relative_path(absolute_path: Path | str) -> str:
+def to_relative_path(absolute_path: Path | str, *, allow_outside: bool = False) -> str:
     """
     Convert absolute filesystem path to relative path for DB storage.
     
     Args:
         absolute_path: Absolute path like /data/projects/{project}/versions/{version}/...
+        allow_outside: If False (default), raise ValueError for paths outside DATA_DIR.
+                       If True, return path as-is (legacy behavior, use with caution).
         
     Returns:
         Relative path like "{project}/versions/{version}/..."
+        
+    Raises:
+        ValueError: If path is outside DATA_DIR and allow_outside=False
     """
     path = Path(absolute_path)
     try:
         return str(path.relative_to(settings.DATA_DIR))
     except ValueError:
-        # Already relative or different base - return as-is
-        return str(path)
+        if allow_outside:
+            # Legacy behavior - return as-is (use with caution)
+            return str(path)
+        # Path is outside DATA_DIR - this is likely a bug
+        raise ValueError(
+            f"Path '{path}' is outside DATA_DIR '{settings.DATA_DIR}'. "
+            "All stored paths must be relative to DATA_DIR."
+        )
 
 
 def to_absolute_path(relative_path: str) -> Path:
@@ -99,8 +110,11 @@ def migrate_absolute_to_relative(absolute_path: Optional[str]) -> Optional[str]:
     """
     Helper for migrating existing absolute paths to relative.
     Returns None if input is None.
+    
+    For migration purposes, paths outside DATA_DIR are returned as-is
+    (they may already be relative or need manual review).
     """
     if not absolute_path:
         return None
-    return to_relative_path(absolute_path)
+    return to_relative_path(absolute_path, allow_outside=True)
 

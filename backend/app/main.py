@@ -4,7 +4,7 @@ FastAPI Application Entry Point
 import re
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -50,6 +50,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def ensure_cors_headers(request: Request, call_next):
+    """
+    Ensure CORS headers are present for all responses (including /static/* and error responses).
+
+    Some clients (e.g. CanvasEditor background fetch) use `fetch()` with credentials which is
+    blocked unless the response includes explicit `Access-Control-Allow-Origin` + credentials.
+    """
+    response = await call_next(request)
+    origin = request.headers.get("origin")
+
+    if origin and origin in cors_origins:
+        # Don't override CORSMiddleware if it already set these
+        response.headers.setdefault("Access-Control-Allow-Origin", origin)
+        response.headers.setdefault("Access-Control-Allow-Credentials", "true")
+
+        vary = response.headers.get("Vary")
+        if vary:
+            if "Origin" not in vary:
+                response.headers["Vary"] = f"{vary}, Origin"
+        else:
+            response.headers["Vary"] = "Origin"
+
+    return response
+
 # API routes
 app.include_router(api_router, prefix="/api")
 
@@ -72,7 +98,11 @@ UUID_PATTERN = re.compile(
 #          new TTS uses slide_<uuid>.wav for the same reason.
 UUID_FILENAME_PART = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 SLIDE_FILENAME_PATTERN = re.compile(
-    rf"^(?:\d{{3}}|slide_{UUID_FILENAME_PART})\.png$",
+    # Allow:
+    # - legacy: 001.png
+    # - user slide: slide_<uuid>.png
+    # - rendered preview: slide_<uuid>_<render_key>.png (render_key = 16 hex chars)
+    rf"^(?:\d{{3}}|slide_{UUID_FILENAME_PART}(?:_[0-9a-f]{{16}})?)\.png$",
     re.IGNORECASE,
 )
 AUDIO_FILENAME_PATTERN = re.compile(
@@ -215,6 +245,109 @@ async def serve_project_music(
             "Cache-Control": "no-store, max-age=0",
             "Pragma": "no-cache",
         },
+    )
+
+
+# Asset filename pattern (UUID-based)
+ASSET_FILENAME_PATTERN = re.compile(
+    rf"^{UUID_FILENAME_PART}\.(png|jpg|jpeg|webp|gif)$",
+    re.IGNORECASE,
+)
+
+
+@app.get("/static/assets/{project_id}/{filename}")
+async def serve_asset(
+    project_id: str,
+    filename: str,
+    _: str = Depends(verify_session),
+):
+    """
+    Serve project assets (images, backgrounds, icons) with path traversal protection.
+    Requires authentication.
+    """
+    # Validate UUID
+    safe_project_id = validate_uuid(project_id)
+    
+    # Validate filename format
+    if not ASSET_FILENAME_PATTERN.match(filename):
+        raise HTTPException(status_code=400, detail="Invalid filename format")
+    
+    # Build path
+    assets_dir = (settings.DATA_DIR / safe_project_id / "assets").resolve()
+    
+    file_path = assets_dir / filename
+    resolved_path = file_path.resolve()
+    
+    # Verify path is within assets_dir
+    if not resolved_path.is_relative_to(assets_dir):
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    
+    if not resolved_path.exists():
+        raise HTTPException(status_code=404, detail="Asset not found")
+    
+    # Determine media type
+    ext = resolved_path.suffix.lower()
+    media_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }
+    media_type = media_types.get(ext, "application/octet-stream")
+    
+    return FileResponse(
+        path=resolved_path,
+        media_type=media_type,
+        filename=filename,
+    )
+
+
+@app.get("/static/assets/{project_id}/thumbs/{filename}")
+async def serve_asset_thumbnail(
+    project_id: str,
+    filename: str,
+    _: str = Depends(verify_session),
+):
+    """
+    Serve asset thumbnails with path traversal protection.
+    Requires authentication.
+    """
+    # Validate UUID
+    safe_project_id = validate_uuid(project_id)
+    
+    # Validate filename format
+    if not ASSET_FILENAME_PATTERN.match(filename):
+        raise HTTPException(status_code=400, detail="Invalid filename format")
+    
+    # Build path
+    thumbs_dir = (settings.DATA_DIR / safe_project_id / "assets" / "thumbs").resolve()
+    
+    file_path = thumbs_dir / filename
+    resolved_path = file_path.resolve()
+    
+    # Verify path is within thumbs_dir
+    if not resolved_path.is_relative_to(thumbs_dir):
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    
+    if not resolved_path.exists():
+        raise HTTPException(status_code=404, detail="Thumbnail not found")
+    
+    # Determine media type
+    ext = resolved_path.suffix.lower()
+    media_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }
+    media_type = media_types.get(ext, "application/octet-stream")
+    
+    return FileResponse(
+        path=resolved_path,
+        media_type=media_type,
+        filename=filename,
     )
 
 

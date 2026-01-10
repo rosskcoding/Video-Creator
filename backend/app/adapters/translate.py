@@ -1,6 +1,10 @@
 """
 OpenAI Translation Adapter
 Handles multilingual translation with glossary support
+
+EPIC A Enhancement:
+Preserves marker tokens (⟦M:uuid⟧) during translation.
+These tokens enable stable animation triggers across languages.
 """
 import hashlib
 import logging
@@ -12,6 +16,12 @@ import httpx
 from openai import AsyncOpenAI
 
 from app.core.config import settings
+from app.adapters.marker_tokens import (
+    contains_marker_tokens,
+    get_translation_prompt_instructions,
+    parse_marker_tokens,
+    extract_marker_ids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,14 +92,19 @@ class TranslateAdapter:
             if pt.get("lang") == target_lang
         ]
         
-        # Build prompt
+        # Check if text contains marker tokens
+        has_markers = contains_marker_tokens(text)
+        source_marker_ids = extract_marker_ids(text) if has_markers else []
+        
+        # Build prompt with marker token instructions if needed
         system_prompt = self._build_system_prompt(
             source_lang,
             target_lang,
             do_not_translate,
             lang_translations,
             style,
-            extra_rules
+            extra_rules,
+            has_marker_tokens=has_markers
         )
         
         response = await self.client.chat.completions.create(
@@ -103,6 +118,18 @@ class TranslateAdapter:
         
         translated_text = response.choices[0].message.content.strip()
         
+        # Validate marker tokens are preserved in translation
+        markers_preserved = True
+        if has_markers:
+            target_marker_ids = extract_marker_ids(translated_text)
+            missing_markers = set(source_marker_ids) - set(target_marker_ids)
+            if missing_markers:
+                logger.warning(
+                    f"Translation lost marker tokens: {missing_markers}. "
+                    f"Source had {len(source_marker_ids)}, target has {len(target_marker_ids)}"
+                )
+                markers_preserved = False
+        
         # Build metadata
         metadata = {
             "model": self.model,
@@ -112,6 +139,9 @@ class TranslateAdapter:
             "timestamp": datetime.utcnow().isoformat(),
             "glossary_terms_count": len(do_not_translate) + len(lang_translations),
             "source_checksum": self._checksum(text),
+            "has_marker_tokens": has_markers,
+            "markers_preserved": markers_preserved,
+            "marker_count": len(source_marker_ids),
         }
         
         return translated_text, metadata
@@ -201,9 +231,13 @@ class TranslateAdapter:
         strict: bool = False,
     ) -> List[str]:
         """Single attempt at batch translation"""
+        # Check if any text contains marker tokens
+        has_markers = any(contains_marker_tokens(t) for t in texts)
+        
         system_prompt = self._build_batch_system_prompt(
             source_lang, target_lang, do_not_translate,
-            lang_translations, style, extra_rules, strict
+            lang_translations, style, extra_rules, strict,
+            has_marker_tokens=has_markers
         )
         
         # Format input as numbered list
@@ -298,6 +332,7 @@ class TranslateAdapter:
         preferred_translations: List[Dict[str, str]],
         style: str,
         extra_rules: Optional[str],
+        has_marker_tokens: bool = False,
     ) -> str:
         """Build system prompt for translation"""
         
@@ -319,6 +354,13 @@ class TranslateAdapter:
             "5. Maintain the same paragraph structure and line breaks",
             "6. Adapt punctuation and formatting to target language conventions where appropriate",
         ]
+        
+        # Add marker token preservation instructions if text contains markers
+        if has_marker_tokens:
+            prompt_parts.extend([
+                "",
+                get_translation_prompt_instructions()
+            ])
         
         if do_not_translate:
             prompt_parts.extend([
@@ -358,12 +400,14 @@ class TranslateAdapter:
         style: str,
         extra_rules: Optional[str],
         strict: bool = False,
+        has_marker_tokens: bool = False,
     ) -> str:
         """Build system prompt for batch translation"""
         
         base_prompt = self._build_system_prompt(
             source_lang, target_lang, do_not_translate,
-            preferred_translations, style, extra_rules
+            preferred_translations, style, extra_rules,
+            has_marker_tokens=has_marker_tokens
         )
         
         if strict:

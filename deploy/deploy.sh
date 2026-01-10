@@ -77,7 +77,19 @@ check_requirements() {
 validate_env() {
     log_info "Validating environment variables..."
     
-    source "$ENV_FILE"
+    # Parse .env as data, not code (avoid RCE via malicious .env)
+    set -a
+    while IFS='=' read -r key value; do
+        # Skip comments and empty lines
+        [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+        # Remove surrounding quotes from value
+        value="${value%\"}"
+        value="${value#\"}"
+        value="${value%\'}"
+        value="${value#\'}"
+        export "$key=$value"
+    done < "$ENV_FILE"
+    set +a
     
     local required_vars=(
         "DOMAIN"
@@ -128,8 +140,11 @@ validate_env() {
 pull_images() {
     if [ "$1" != "--no-pull" ]; then
         log_info "Pulling latest images..."
-        docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" pull || true
-        log_success "Images pulled"
+        if ! docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" pull; then
+            log_warning "Some images failed to pull. This is OK if building locally."
+            log_warning "If using a registry, check your credentials and image names."
+        fi
+        log_success "Images pull step completed"
     else
         log_info "Skipping image pull (--no-pull flag)"
     fi
@@ -172,11 +187,45 @@ health_check() {
     
     local max_attempts=30
     local attempt=1
+    local critical_services=("api" "frontend" "db" "redis")
     
     while [ $attempt -le $max_attempts ]; do
-        if docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps | grep -q "healthy"; then
-            log_success "Services are healthy!"
-            break
+        local all_healthy=true
+        local status_output
+        
+        for service in "${critical_services[@]}"; do
+            # Get container ID for the service
+            local container_id
+            container_id=$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -q "$service" 2>/dev/null)
+            
+            if [ -z "$container_id" ]; then
+                log_warning "Service $service not found"
+                all_healthy=false
+                continue
+            fi
+            
+            # Check health status
+            local health_status
+            health_status=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$container_id" 2>/dev/null)
+            
+            case "$health_status" in
+                "healthy"|"no-healthcheck")
+                    # OK - either healthy or no healthcheck defined
+                    ;;
+                "starting")
+                    all_healthy=false
+                    ;;
+                *)
+                    log_warning "Service $service is $health_status"
+                    all_healthy=false
+                    ;;
+            esac
+        done
+        
+        if [ "$all_healthy" = true ]; then
+            log_success "All critical services are healthy!"
+            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
+            return 0
         fi
         
         log_info "Waiting for services to be healthy... (attempt $attempt/$max_attempts)"
@@ -184,9 +233,9 @@ health_check() {
         ((attempt++))
     done
     
-    if [ $attempt -gt $max_attempts ]; then
-        log_warning "Health check timeout. Some services may still be starting."
-    fi
+    log_error "Health check timeout. Service status:"
+    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
+    return 1
 }
 
 # Show status
@@ -194,7 +243,9 @@ show_status() {
     log_info "Service status:"
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
     
-    source "$ENV_FILE"
+    # Parse DOMAIN from env file safely
+    local DOMAIN
+    DOMAIN=$(grep -E '^DOMAIN=' "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
     echo ""
     log_success "Deployment complete!"
     echo ""

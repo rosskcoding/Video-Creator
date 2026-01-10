@@ -1,14 +1,23 @@
 /** @type {import('next').NextConfig} */
+
+// Safely parse hostname from URL, returns null if invalid
+function safeGetHostname(url) {
+  if (!url) return null;
+  try {
+    // Add protocol if missing
+    const urlWithProtocol = url.startsWith('http') ? url : `https://${url}`;
+    return new URL(urlWithProtocol).hostname;
+  } catch {
+    // If URL is invalid, try to use it directly as hostname
+    return url.split('/')[0].split(':')[0];
+  }
+}
+
 const nextConfig = {
   reactStrictMode: true,
   
   // Standalone output for Docker production builds
   output: 'standalone',
-  
-  eslint: {
-    // This repo doesn't ship with an ESLint setup; avoid failing production builds.
-    ignoreDuringBuilds: true,
-  },
   
   images: {
     remotePatterns: [
@@ -20,9 +29,7 @@ const nextConfig = {
       {
         // Production: allow images from the same domain via proxy
         protocol: "https",
-        hostname: process.env.NEXT_PUBLIC_API_URL 
-          ? new URL(process.env.NEXT_PUBLIC_API_URL).hostname 
-          : "localhost",
+        hostname: safeGetHostname(process.env.NEXT_PUBLIC_API_URL) || "localhost",
       },
     ],
   },

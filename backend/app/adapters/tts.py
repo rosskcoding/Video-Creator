@@ -1,12 +1,15 @@
 """
 ElevenLabs TTS Adapter
 Based on rsrohan99/presenter but with caching and error handling
+Supports word-level timestamps for animation triggers.
 """
 import hashlib
 import tempfile
 import asyncio
+import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple, List
+from dataclasses import dataclass
 
 from elevenlabs.client import ElevenLabs
 
@@ -14,6 +17,13 @@ from app.core.config import settings
 
 # HARDCODED VOICE - always use this voice, ignore any other settings
 HARDCODED_VOICE_ID = "iBcRJa9DRdlJlVihC0V6"
+
+
+@dataclass
+class TTSResult:
+    """Result from TTS generation including optional timestamps"""
+    duration: float
+    alignment: Optional[dict] = None  # Character-level timing from ElevenLabs
 
 
 class TTSAdapter:
@@ -72,6 +82,28 @@ class TTSAdapter:
         Returns:
             Duration of generated audio in seconds
         """
+        result = await self.generate_speech_with_timestamps(text, output_path, voice_id, model)
+        return result.duration
+    
+    async def generate_speech_with_timestamps(
+        self,
+        text: str,
+        output_path: Path,
+        voice_id: Optional[str] = None,  # IGNORED - using hardcoded voice
+        model: Optional[str] = None,
+    ) -> TTSResult:
+        """
+        Generate speech from text with character-level timestamps.
+        
+        Args:
+            text: Text to convert to speech
+            output_path: Path to save the audio file (WAV preferred)
+            voice_id: IGNORED - always uses hardcoded voice
+            model: TTS model ID
+            
+        Returns:
+            TTSResult with duration and alignment data
+        """
         # ALWAYS use hardcoded voice, ignore parameter
         voice_id = HARDCODED_VOICE_ID
         model = model or self.model
@@ -84,21 +116,50 @@ class TTSAdapter:
         # If caller requests .wav, we download mp3 into a temp file and transcode to WAV.
         wants_wav = output_path.suffix.lower() == ".wav"
         tmp_suffix = ".mp3"
+        
+        alignment = None
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_audio_path = Path(tmp_dir) / f"tts{tmp_suffix}"
 
-            # Generate audio (keep this call minimal to avoid SDK incompatibilities)
-            response = self.client.text_to_speech.convert(
-                text=text,
-                voice_id=voice_id,
-                model_id=model,
-            )
+            # Try to use convert_with_timestamps for alignment data
+            try:
+                response = self.client.text_to_speech.convert_with_timestamps(
+                    text=text,
+                    voice_id=voice_id,
+                    model_id=model,
+                )
+                
+                # The response should contain audio_base64 and alignment
+                if hasattr(response, 'audio_base64') and response.audio_base64:
+                    import base64
+                    audio_bytes = base64.b64decode(response.audio_base64)
+                    tmp_audio_path.write_bytes(audio_bytes)
+                    
+                    # Extract alignment if available
+                    if hasattr(response, 'alignment') and response.alignment:
+                        alignment = {
+                            "characters": response.alignment.characters if hasattr(response.alignment, 'characters') else [],
+                            "character_start_times_seconds": response.alignment.character_start_times_seconds if hasattr(response.alignment, 'character_start_times_seconds') else [],
+                            "character_end_times_seconds": response.alignment.character_end_times_seconds if hasattr(response.alignment, 'character_end_times_seconds') else [],
+                        }
+                else:
+                    # Fallback to regular convert if response format is different
+                    raise ValueError("Unexpected response format from convert_with_timestamps")
+                    
+            except Exception as e:
+                # Fallback to regular convert without timestamps
+                print(f"Warning: convert_with_timestamps failed ({e}), using regular convert")
+                response = self.client.text_to_speech.convert(
+                    text=text,
+                    voice_id=voice_id,
+                    model_id=model,
+                )
 
-            with open(tmp_audio_path, "wb") as f:
-                for chunk in response:
-                    if chunk:
-                        f.write(chunk)
+                with open(tmp_audio_path, "wb") as f:
+                    for chunk in response:
+                        if chunk:
+                            f.write(chunk)
 
             if wants_wav:
                 await self._transcode_to_wav(tmp_audio_path, output_path)
@@ -108,7 +169,7 @@ class TTSAdapter:
         
         # Get duration using ffprobe
         duration = await self._get_audio_duration(output_path)
-        return duration
+        return TTSResult(duration=duration, alignment=alignment)
     
     async def _transcode_to_wav(self, input_path: Path, output_path: Path) -> None:
         """Transcode audio to WAV (PCM) for stable mixing."""

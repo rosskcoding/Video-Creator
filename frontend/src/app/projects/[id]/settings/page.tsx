@@ -100,6 +100,26 @@ export default function ProjectSettingsPage() {
     },
   });
 
+  const uploadMusicMutation = useMutation({
+    mutationFn: (file: File) => api.uploadMusic(projectId, file),
+    onMutate: () => {
+      // Stop current preview when replacing the music.
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      setIsPlaying(false);
+    },
+    onSuccess: () => {
+      toast.success("Music uploaded");
+      queryClient.invalidateQueries({ queryKey: ["audioSettings", projectId] });
+    },
+    onError: (error: any) => {
+      const detail = error?.response?.data?.detail;
+      toast.error(detail || "Music upload failed");
+    },
+  });
+
   // Music drag-and-drop handler
   const onDropMusic = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -110,7 +130,7 @@ export default function ProjectSettingsPage() {
       }
       uploadMusicMutation.mutate(file);
     }
-  }, []);
+  }, [uploadMusicMutation]);
 
   const {
     getRootProps: getMusicDropRootProps,
@@ -174,26 +194,6 @@ export default function ProjectSettingsPage() {
     onSuccess: () => {
       toast.success("Audio settings saved");
       queryClient.invalidateQueries({ queryKey: ["audioSettings", projectId] });
-    },
-  });
-
-  const uploadMusicMutation = useMutation({
-    mutationFn: (file: File) => api.uploadMusic(projectId, file),
-    onMutate: () => {
-      // Stop current preview when replacing the music.
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      setIsPlaying(false);
-    },
-    onSuccess: () => {
-      toast.success("Music uploaded");
-      queryClient.invalidateQueries({ queryKey: ["audioSettings", projectId] });
-    },
-    onError: (error: any) => {
-      const detail = error?.response?.data?.detail;
-      toast.error(detail || "Music upload failed");
     },
   });
 
@@ -277,6 +277,14 @@ export default function ProjectSettingsPage() {
                       <li>
                         <span className="font-medium text-foreground">Target Loudness</span> — целевая громкость финального
                         микса (LUFS). -14 обычно громче, -16 — чуть тише.
+                      </li>
+                      <li>
+                        <span className="font-medium text-foreground">Music Fade In</span> — плавное нарастание музыки в начале
+                        видео (сек). 0 = резкое начало.
+                      </li>
+                      <li>
+                        <span className="font-medium text-foreground">Music Fade Out</span> — плавное затухание музыки в конце
+                        видео (сек). 0 = резкий обрыв.
                       </li>
                     </ul>
                   </div>
@@ -535,6 +543,54 @@ export default function ProjectSettingsPage() {
                   <option value="-14">-14 LUFS (Streaming)</option>
                   <option value="-16">-16 LUFS (Podcast)</option>
                 </Select>
+              </div>
+
+              {/* Music Fade In/Out */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[13px] font-medium mb-2 block">
+                    Music Fade In
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={localAudioSettings.music_fade_in_sec ?? 2}
+                      onChange={(e) =>
+                        setLocalAudioSettings({
+                          ...localAudioSettings,
+                          music_fade_in_sec: Number(e.target.value),
+                        })
+                      }
+                      min={0}
+                      max={10}
+                      step={0.5}
+                      className="w-20"
+                    />
+                    <span className="text-[13px] text-muted-foreground">sec</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[13px] font-medium mb-2 block">
+                    Music Fade Out
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={localAudioSettings.music_fade_out_sec ?? 3}
+                      onChange={(e) =>
+                        setLocalAudioSettings({
+                          ...localAudioSettings,
+                          music_fade_out_sec: Number(e.target.value),
+                        })
+                      }
+                      min={0}
+                      max={10}
+                      step={0.5}
+                      className="w-20"
+                    />
+                    <span className="text-[13px] text-muted-foreground">sec</span>
+                  </div>
+                </div>
               </div>
 
               <div className="pt-2">

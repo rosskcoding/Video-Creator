@@ -35,7 +35,8 @@ ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
 class SlideResponse(BaseModel):
     id: uuid.UUID
     slide_index: int
-    image_url: str  # URL for serving the image
+    image_url: str  # URL for serving the image (original slide)
+    preview_url: Optional[str] = None  # URL for rendered preview with canvas layers
     notes_text: Optional[str]
     slide_hash: Optional[str]
 
@@ -98,6 +99,7 @@ async def get_slides(
             id=s.id,
             slide_index=s.slide_index,
             image_url=slide_image_url(s.image_path),  # Convert to URL
+            preview_url=slide_image_url(s.preview_path) if s.preview_path else None,
             notes_text=s.notes_text,
             slide_hash=s.slide_hash,
         )
@@ -122,6 +124,7 @@ async def get_slide(slide_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
         "id": str(slide.id),
         "slide_index": slide.slide_index,
         "image_url": slide_image_url(slide.image_path),  # URL instead of path
+        "preview_url": slide_image_url(slide.preview_path) if slide.preview_path else None,
         "notes_text": slide.notes_text,
         "scripts": [
             {
@@ -140,6 +143,8 @@ async def get_slide(slide_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
                 "voice_id": a.voice_id,
                 "audio_url": slide_audio_url(a.audio_path),  # URL instead of path
                 "duration_sec": a.duration_sec,
+                "created_at": a.created_at.isoformat(),
+                "script_text_hash": a.script_text_hash,  # Hash of script used for TTS (for sync tracking)
             }
             for a in slide.audio_files
         ],
@@ -433,10 +438,13 @@ async def update_script(
     db: AsyncSession = Depends(get_db)
 ):
     """Update script text for a slide/language"""
+    # Validate language code
+    safe_lang = validate_lang_code(lang)
+    
     result = await db.execute(
         select(SlideScript)
         .where(SlideScript.slide_id == slide_id)
-        .where(SlideScript.lang == lang)
+        .where(SlideScript.lang == safe_lang)
     )
     script = result.scalar_one_or_none()
     
@@ -449,7 +457,7 @@ async def update_script(
         
         script = SlideScript(
             slide_id=slide_id,
-            lang=lang,
+            lang=safe_lang,
             text=data.text,
             source=ScriptSource.MANUAL,
         )

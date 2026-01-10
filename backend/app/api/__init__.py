@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import projects, slides, render, auth
+from app.api.routes import projects, slides, render, auth, canvas
 from app.api.routes.auth import require_admin
 
 router = APIRouter()
@@ -25,6 +25,13 @@ router.include_router(
     render.router, 
     prefix="/render", 
     tags=["render"],
+    dependencies=[require_admin]
+)
+# Canvas Editor routes (scenes, markers, assets)
+router.include_router(
+    canvas.router,
+    prefix="/canvas",
+    tags=["canvas"],
     dependencies=[require_admin]
 )
 

@@ -1,6 +1,5 @@
 import os
 import subprocess
-import pickle
 from typing import Any, List
 
 from llama_parse import LlamaParse
@@ -85,7 +84,7 @@ class PresenterWorkflow(Workflow):
     @step
     async def ingest_data_and_find_topic(
         self, ctx: Context, ev: DataFolderFound
-    ) -> TopicFound:
+    ) -> StructureFinalized:
         data_folder = os.path.join("data")
         # read all files in the data folder
         parser = LlamaParse(result_type="markdown")
@@ -96,16 +95,23 @@ class PresenterWorkflow(Workflow):
         presentation_structure_with_title = create_presentation_structure_from_data(
             documents, self.llm
         )
-        await ctx.set("topic", presentation_structure_with_title.title)
+        topic = presentation_structure_with_title.title
+        await ctx.set("topic", topic)
+
+        # Ensure presentation folder exists now that we have the title.
+        presentation_folder = os.path.join("presentations", get_safe_foldername(topic))
+        await ctx.set("presentation_folder", presentation_folder)
+        os.makedirs(presentation_folder, exist_ok=True)
+
         structure = PresentationStructure(
             slides=presentation_structure_with_title.slides
         )
 
         structure_file = os.path.join(
-            await ctx.get("presentation_folder"), "structure.pkl"
+            await ctx.get("presentation_folder"), "structure.json"
         )
-        with open(structure_file, "wb") as f:
-            pickle.dump(structure, f)
+        with open(structure_file, "w", encoding="utf-8") as f:
+            f.write(structure.model_dump_json(indent=2))
         return StructureFinalized(structure=structure)
 
     @step
@@ -117,14 +123,14 @@ class PresenterWorkflow(Workflow):
         await ctx.set("presentation_folder", presentation_folder)
         if not os.path.exists(presentation_folder):
             os.makedirs(presentation_folder)
-        structure_file = os.path.join(presentation_folder, "structure.pkl")
+        structure_file = os.path.join(presentation_folder, "structure.json")
         if os.path.exists(structure_file):
             print(
                 f"\n> Presentation structure already exists for topic: {topic}."
                 " Skipping structure creation and using the existing structure.\n"
             )
-            with open(structure_file, "rb") as f:
-                structure = pickle.load(f)
+            with open(structure_file, "r", encoding="utf-8") as f:
+                structure = PresentationStructure.model_validate_json(f.read())
             return StructureFinalized(structure=structure)
         return StructureRequestReceived(topic=topic)
 
@@ -157,12 +163,12 @@ class PresenterWorkflow(Workflow):
         updated_structure = update_presentation_structure(
             topic, structure, feedback, self.llm
         )
-        # pickle the structure in the presentation folder
+        # Store the structure as JSON (avoid unsafe serialization formats)
         structure_file = os.path.join(
-            await ctx.get("presentation_folder"), "structure.pkl"
+            await ctx.get("presentation_folder"), "structure.json"
         )
-        with open(structure_file, "wb") as f:
-            pickle.dump(updated_structure, f)
+        with open(structure_file, "w", encoding="utf-8") as f:
+            f.write(updated_structure.model_dump_json(indent=2))
         return StructureFinalized(structure=updated_structure)
 
     @step

@@ -55,9 +55,17 @@
 
 ### 1. Подготовка сервера
 
+> ⚠️ **Безопасность**: Не используйте подход “pipe-to-shell” (например, `curl → bash`) в production! Это supply-chain риск.
+> Вместо этого скачайте скрипт, проверьте его содержимое, затем запустите.
+
 ```bash
-# На свежем сервере
-curl -fsSL https://raw.githubusercontent.com/YOUR_REPO/main/deploy/setup-server.sh | bash
+# Безопасный способ (рекомендуется):
+curl -fsSL https://raw.githubusercontent.com/YOUR_REPO/main/deploy/setup-server.sh -o setup-server.sh
+# Проверьте содержимое скрипта:
+less setup-server.sh
+# Затем запустите:
+chmod +x setup-server.sh
+./setup-server.sh
 ```
 
 Или вручную:

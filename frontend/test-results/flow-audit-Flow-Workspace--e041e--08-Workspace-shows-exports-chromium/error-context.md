@@ -1,0 +1,183 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - link [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img [ref=e5]
+      - navigation [ref=e8]:
+        - link "Projects" [ref=e9] [cursor=pointer]:
+          - /url: /
+          - img [ref=e10]
+          - generic: Projects
+        - link "Workspace" [ref=e12] [cursor=pointer]:
+          - /url: /workspace
+          - img [ref=e13]
+          - generic: Workspace
+        - link "Jobs" [ref=e16] [cursor=pointer]:
+          - /url: /admin/jobs
+          - img [ref=e17]
+          - generic: Jobs
+        - link "Admin" [ref=e20] [cursor=pointer]:
+          - /url: /admin
+          - img [ref=e21]
+          - generic: Admin
+        - link "Help" [ref=e24] [cursor=pointer]:
+          - /url: /help
+          - img [ref=e25]
+          - generic: Help
+    - main [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e31]:
+          - generic [ref=e32]:
+            - heading "Workspace" [level=1] [ref=e33]
+            - paragraph [ref=e34]: Download and manage exported videos
+          - generic [ref=e35]:
+            - generic [ref=e36]:
+              - img [ref=e37]
+              - textbox "Search exports by project name or language" [ref=e40]:
+                - /placeholder: Search exports...
+            - button "Refresh" [ref=e41] [cursor=pointer]:
+              - img [ref=e42]
+              - text: Refresh
+        - generic [ref=e48]:
+          - generic [ref=e49]:
+            - img [ref=e50]
+            - generic [ref=e52]: "Total exports:"
+            - generic [ref=e53]: "4"
+          - generic [ref=e54]:
+            - img [ref=e55]
+            - generic [ref=e57]: "Total size:"
+            - generic [ref=e58]: 21.7 MB
+          - generic [ref=e59]:
+            - img [ref=e60]
+            - generic [ref=e63]: "Projects:"
+            - generic [ref=e64]: "2"
+        - main [ref=e65]:
+          - generic [ref=e66]:
+            - generic [ref=e67]:
+              - generic [ref=e68]:
+                - heading "Test 2" [level=3] [ref=e69]
+                - paragraph [ref=e70]: 3 languages exported
+              - generic [ref=e72]:
+                - generic [ref=e73]:
+                  - generic [ref=e74]:
+                    - img [ref=e76]
+                    - generic [ref=e80]:
+                      - generic [ref=e81]:
+                        - generic [ref=e82]: English
+                        - generic [ref=e83]: EN
+                        - generic [ref=e84]: +SRT
+                        - generic [ref=e85]: +PPTX
+                      - generic [ref=e86]:
+                        - generic [ref=e87]:
+                          - img [ref=e88]
+                          - text: 5.79 MB
+                        - generic [ref=e90]:
+                          - img [ref=e91]
+                          - text: Jan 6, 2026, 10:36 PM
+                  - generic [ref=e93]:
+                    - button "Video" [ref=e94] [cursor=pointer]:
+                      - img [ref=e95]
+                      - text: Video
+                    - button "SRT" [ref=e98] [cursor=pointer]:
+                      - img [ref=e99]
+                      - text: SRT
+                    - button "PPTX" [ref=e102] [cursor=pointer]:
+                      - img [ref=e103]
+                      - text: PPTX
+                    - button "Delete export" [ref=e106] [cursor=pointer]:
+                      - img [ref=e107]
+                - generic [ref=e110]:
+                  - generic [ref=e111]:
+                    - img [ref=e113]
+                    - generic [ref=e117]:
+                      - generic [ref=e118]:
+                        - generic [ref=e119]: Arabic
+                        - generic [ref=e120]: AR
+                        - generic [ref=e121]: +SRT
+                        - generic [ref=e122]: +PPTX
+                      - generic [ref=e123]:
+                        - generic [ref=e124]:
+                          - img [ref=e125]
+                          - text: 6.17 MB
+                        - generic [ref=e127]:
+                          - img [ref=e128]
+                          - text: Jan 6, 2026, 10:28 PM
+                  - generic [ref=e130]:
+                    - button "Video" [ref=e131] [cursor=pointer]:
+                      - img [ref=e132]
+                      - text: Video
+                    - button "SRT" [ref=e135] [cursor=pointer]:
+                      - img [ref=e136]
+                      - text: SRT
+                    - button "PPTX" [ref=e139] [cursor=pointer]:
+                      - img [ref=e140]
+                      - text: PPTX
+                    - button "Delete export" [ref=e143] [cursor=pointer]:
+                      - img [ref=e144]
+                - generic [ref=e147]:
+                  - generic [ref=e148]:
+                    - img [ref=e150]
+                    - generic [ref=e154]:
+                      - generic [ref=e155]:
+                        - generic [ref=e156]: Ukrainian
+                        - generic [ref=e157]: UK
+                        - generic [ref=e158]: +SRT
+                        - generic [ref=e159]: +PPTX
+                      - generic [ref=e160]:
+                        - generic [ref=e161]:
+                          - img [ref=e162]
+                          - text: 6.39 MB
+                        - generic [ref=e164]:
+                          - img [ref=e165]
+                          - text: Jan 6, 2026, 10:27 PM
+                  - generic [ref=e167]:
+                    - button "Video" [ref=e168] [cursor=pointer]:
+                      - img [ref=e169]
+                      - text: Video
+                    - button "SRT" [ref=e172] [cursor=pointer]:
+                      - img [ref=e173]
+                      - text: SRT
+                    - button "PPTX" [ref=e176] [cursor=pointer]:
+                      - img [ref=e177]
+                      - text: PPTX
+                    - button "Delete export" [ref=e180] [cursor=pointer]:
+                      - img [ref=e181]
+            - generic [ref=e184]:
+              - generic [ref=e185]:
+                - heading "Test" [level=3] [ref=e186]
+                - paragraph [ref=e187]: 1 language exported
+              - generic [ref=e190]:
+                - generic [ref=e191]:
+                  - img [ref=e193]
+                  - generic [ref=e197]:
+                    - generic [ref=e198]:
+                      - generic [ref=e199]: Ukrainian
+                      - generic [ref=e200]: UK
+                      - generic [ref=e201]: +SRT
+                      - generic [ref=e202]: +PPTX
+                    - generic [ref=e203]:
+                      - generic [ref=e204]:
+                        - img [ref=e205]
+                        - text: 3.39 MB
+                      - generic [ref=e207]:
+                        - img [ref=e208]
+                        - text: Jan 6, 2026, 08:07 PM
+                - generic [ref=e210]:
+                  - button "Video" [ref=e211] [cursor=pointer]:
+                    - img [ref=e212]
+                    - text: Video
+                  - button "SRT" [ref=e215] [cursor=pointer]:
+                    - img [ref=e216]
+                    - text: SRT
+                  - button "PPTX" [ref=e219] [cursor=pointer]:
+                    - img [ref=e220]
+                    - text: PPTX
+                  - button "Delete export" [ref=e223] [cursor=pointer]:
+                    - img [ref=e224]
+  - region "Notifications alt+T"
+  - alert [ref=e227]
+```

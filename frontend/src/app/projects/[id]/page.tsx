@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,6 +25,7 @@ import {
   FileVideo,
   FileText,
   BookText,
+  Tag,
   Trash2,
   Plus,
   GripVertical,
@@ -32,11 +33,12 @@ import {
   X,
 } from "lucide-react";
 import { api, Slide, Voice } from "@/lib/api";
-import { cn, getLanguageName, estimateDuration, formatDuration, formatRelativeTime, LANGUAGES } from "@/lib/utils";
+import { cn, getLanguageName, estimateDuration, formatDuration, formatRelativeTime, LANGUAGES, computeScriptHash } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useDropzone } from "react-dropzone";
 import { Button, Badge, Input, Textarea, Select } from "@/components/ui";
+import { CanvasEditor, MarkersManager } from "@/components/canvas";
 import {
   DndContext,
   closestCenter,
@@ -69,8 +71,10 @@ export default function ProjectEditorPage() {
   const [scriptText, setScriptText] = useState("");
   const [isSaved, setIsSaved] = useState(true);
   const [slideFilter, setSlideFilter] = useState<SlideFilter>("all");
+  const [currentVersionId, setCurrentVersionId] = useState<string | null>(null);
   const [showAddLang, setShowAddLang] = useState(false);
   const [showRenderMenu, setShowRenderMenu] = useState(false);
+  const [isRenderAllPrechecking, setIsRenderAllPrechecking] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [activeRenderJob, setActiveRenderJob] = useState<{
@@ -87,8 +91,18 @@ export default function ProjectEditorPage() {
     status: string;
     startedAt: Date;
   } | null>(null);
+  const [activeTTSTask, setActiveTTSTask] = useState<{
+    taskId: string;
+    scope: "slide" | "all";
+    status: string;
+    startedAt: Date;
+  } | null>(null);
   const [slideMenuId, setSlideMenuId] = useState<string | null>(null);
+  const [showCanvasEditor, setShowCanvasEditor] = useState(false);
+  const [showMarkers, setShowMarkers] = useState(false);
+  const [uploadPath, setUploadPath] = useState<string>("/Users/rk/Desktop/!!! Temp/08.01.2026/test33.pptx");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const conversionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Queries
   const { data: project, isLoading: projectLoading } = useQuery({
@@ -103,7 +117,22 @@ export default function ProjectEditorPage() {
     enabled: !!project,
   });
 
-  const currentVersion = versions?.[0];
+  // Selected version (defaults to project's current_version_id, but user can switch)
+  useEffect(() => {
+    if (currentVersionId) return;
+    if (project?.current_version_id) {
+      setCurrentVersionId(project.current_version_id);
+      return;
+    }
+    if (versions?.length) {
+      setCurrentVersionId(versions[0].id);
+    }
+  }, [currentVersionId, project?.current_version_id, versions]);
+
+  const currentVersion = useMemo(() => {
+    if (!versions?.length) return undefined;
+    return versions.find((v) => v.id === currentVersionId) || versions[0];
+  }, [versions, currentVersionId]);
 
   const { data: slides, refetch: refetchSlides } = useQuery({
     queryKey: ["slides", projectId, currentVersion?.id],
@@ -141,13 +170,68 @@ export default function ProjectEditorPage() {
     enabled: !!projectId,
   });
 
+  // Slide status cache - fetch all slides status for current language
+  const [slidesStatus, setSlidesStatus] = useState<Record<string, { hasScript: boolean; hasAudio: boolean; audioSynced: boolean }>>({});
+  
+  const refreshSlidesStatus = useCallback(async () => {
+    if (!slides?.length) return;
+
+    // Fetch all slides in parallel with concurrency limit to avoid overwhelming backend
+    const BATCH_SIZE = 10;
+    const statuses: Record<string, { hasScript: boolean; hasAudio: boolean; audioSynced: boolean }> = {};
+    
+    // Process in batches
+    for (let i = 0; i < slides.length; i += BATCH_SIZE) {
+      const batch = slides.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(slide => api.getSlide(slide.id))
+      );
+      
+      // Need to process results with async hash computation
+      await Promise.all(results.map(async (result, idx) => {
+        const slide = batch[idx];
+        if (result.status === "fulfilled") {
+          const details = result.value;
+          const script = details.scripts.find((s) => s.lang === selectedLang);
+          const audio = details.audio_files.find((a) => a.lang === selectedLang);
+          const hasScript = !!script?.text && script.text.length > 0;
+          const hasAudio = !!audio;
+          
+          // Check if audio is synced with current script
+          let audioSynced = false;
+          if (hasAudio && hasScript) {
+            if (audio?.script_text_hash) {
+              const currentScriptHash = await computeScriptHash(script!.text);
+              audioSynced = currentScriptHash === audio.script_text_hash;
+            } else if (audio?.created_at && script?.updated_at) {
+              // Fallback for legacy audio (no hash): compare timestamps
+              audioSynced = new Date(audio.created_at).getTime() >= new Date(script.updated_at).getTime();
+            }
+          }
+          
+          statuses[slide.id] = { hasScript, hasAudio, audioSynced };
+        } else {
+          statuses[slide.id] = { hasScript: false, hasAudio: false, audioSynced: false };
+        }
+      }));
+    }
+
+    setSlidesStatus(statuses);
+  }, [slides, selectedLang]);
+
+  // Fetch status for all slides when version/language changes
+  useEffect(() => {
+    refreshSlidesStatus();
+  }, [refreshSlidesStatus]);
+
   // Poll render job status
   useEffect(() => {
-    if (!activeRenderJob) return;
+    const jobId = activeRenderJob?.jobId;
+    if (!jobId) return;
     
     const pollInterval = setInterval(async () => {
       try {
-        const job = await api.getJobStatus(activeRenderJob.jobId);
+        const job = await api.getJobStatus(jobId);
         
         if (job.status === "done") {
           setActiveRenderJob(null);
@@ -169,15 +253,16 @@ export default function ProjectEditorPage() {
     }, 2000);
     
     return () => clearInterval(pollInterval);
-  }, [activeRenderJob?.jobId]);
+  }, [activeRenderJob?.jobId, refetchExports]);
 
   // Poll translation job status
   useEffect(() => {
-    if (!activeTranslationJob) return;
+    const taskId = activeTranslationJob?.taskId;
+    if (!taskId) return;
     
     const pollInterval = setInterval(async () => {
       try {
-        const task = await api.getTaskStatus(activeTranslationJob.taskId);
+        const task = await api.getTaskStatus(taskId);
         
         if (task.ready) {
           setActiveTranslationJob(null);
@@ -201,7 +286,46 @@ export default function ProjectEditorPage() {
     }, 1500);
     
     return () => clearInterval(pollInterval);
-  }, [activeTranslationJob?.taskId]);
+  }, [activeTranslationJob?.taskId, queryClient, refreshSlidesStatus, selectedSlideId]);
+
+  // Poll TTS task status
+  useEffect(() => {
+    const taskId = activeTTSTask?.taskId;
+    if (!taskId) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const task = await api.getTaskStatus(taskId);
+
+        if (task.ready) {
+          setActiveTTSTask(null);
+
+          if (task.status === "SUCCESS") {
+            toast.success("Audio generated!");
+            if (selectedSlideId) {
+              queryClient.invalidateQueries({ queryKey: ["slide", selectedSlideId] });
+            }
+            queryClient.invalidateQueries({ queryKey: ["slides", projectId, currentVersion?.id] });
+            refreshSlidesStatus();
+          } else if (task.status === "FAILURE") {
+            const message =
+              task.error ||
+              task.result?.message ||
+              "Unknown error";
+            toast.error(`TTS failed: ${message}`);
+          }
+        } else {
+          setActiveTTSTask((prev) =>
+            prev ? { ...prev, status: task.status } : null
+          );
+        }
+      } catch (e) {
+        console.error("Error polling TTS status:", e);
+      }
+    }, 1500);
+
+    return () => clearInterval(pollInterval);
+  }, [activeTTSTask?.taskId, currentVersion?.id, projectId, queryClient, refreshSlidesStatus, selectedSlideId]);
 
   // Initialize
   useEffect(() => {
@@ -259,7 +383,7 @@ export default function ProjectEditorPage() {
     };
     
     checkActiveJobs();
-  }, [projectId]);
+  }, [projectId, activeRenderJob]);
 
   const availableLanguages = selectedSlide?.scripts.map((s) => s.lang) || [project?.base_language || "en"];
 
@@ -268,6 +392,9 @@ export default function ProjectEditorPage() {
     mutationFn: (file: File) => api.uploadMedia(projectId, file),
     onSuccess: async (data) => {
       toast.success("File uploaded! Converting...");
+      // Switch UI to the new version immediately
+      setCurrentVersionId(data.version_id);
+      setSelectedSlideId(null);
       const { task_id } = await api.convertPPTX(projectId, data.version_id);
       pollConversionStatus(data.version_id, task_id);
     },
@@ -277,39 +404,78 @@ export default function ProjectEditorPage() {
     },
   });
 
-  const pollConversionStatus = async (versionId: string, taskId?: string) => {
+  const uploadFromPathMutation = useMutation({
+    mutationFn: (path: string) => api.uploadMediaFromPath(projectId, path),
+    onSuccess: async (data) => {
+      toast.success("File uploaded from path! Converting...");
+      // Switch UI to the new version immediately
+      setCurrentVersionId(data.version_id);
+      setSelectedSlideId(null);
+      const { task_id } = await api.convertPPTX(projectId, data.version_id);
+      pollConversionStatus(data.version_id, task_id);
+    },
+    onError: (error: any) => {
+      const detail = error?.response?.data?.detail;
+      toast.error(detail || "Upload from path failed");
+    },
+  });
+
+  const pollConversionStatus = useCallback(async (versionId: string, taskId?: string) => {
+    // Clear any existing timeout to prevent duplicate polling
+    if (conversionTimeoutRef.current) {
+      clearTimeout(conversionTimeoutRef.current);
+      conversionTimeoutRef.current = null;
+    }
+    
     const check = async () => {
-      const versions = await api.getVersions(projectId);
-      const version = versions.find((v) => v.id === versionId);
-      if (version?.status === "ready") {
-        toast.success("Slides ready!");
-        // Invalidate versions first, then slides with correct version ID
-        await queryClient.invalidateQueries({ queryKey: ["versions", projectId] });
-        await queryClient.invalidateQueries({ queryKey: ["slides", projectId, versionId] });
-        // Also refetch to ensure UI updates immediately
-        await queryClient.refetchQueries({ queryKey: ["versions", projectId] });
-      } else if (version?.status === "failed") {
-        // Try to show a more specific error (e.g. unsupported aspect ratio)
-        if (taskId) {
-          try {
-            const task = await api.getTaskStatus(taskId);
-            const message =
-              task?.result?.message ||
-              task?.error ||
-              "Conversion failed";
-            toast.error(message);
-          } catch {
+      try {
+        const versions = await api.getVersions(projectId);
+        const version = versions.find((v) => v.id === versionId);
+        if (version?.status === "ready") {
+          conversionTimeoutRef.current = null;
+          toast.success("Slides ready!");
+          // Invalidate versions first, then slides with correct version ID
+          await queryClient.invalidateQueries({ queryKey: ["versions", projectId] });
+          await queryClient.invalidateQueries({ queryKey: ["slides", projectId, versionId] });
+          // Also refetch to ensure UI updates immediately
+          await queryClient.refetchQueries({ queryKey: ["versions", projectId] });
+        } else if (version?.status === "failed") {
+          conversionTimeoutRef.current = null;
+          // Try to show a more specific error (e.g. unsupported aspect ratio)
+          if (taskId) {
+            try {
+              const task = await api.getTaskStatus(taskId);
+              const message =
+                task?.result?.message ||
+                task?.error ||
+                "Conversion failed";
+              toast.error(message);
+            } catch {
+              toast.error("Conversion failed");
+            }
+          } else {
             toast.error("Conversion failed");
           }
         } else {
-          toast.error("Conversion failed");
+          conversionTimeoutRef.current = setTimeout(check, 2000);
         }
-      } else {
-        setTimeout(check, 2000);
+      } catch (err) {
+        // Network error during polling - stop polling
+        conversionTimeoutRef.current = null;
+        console.error("Error polling conversion status:", err);
       }
     };
     check();
-  };
+  }, [projectId, queryClient]);
+
+  // Cleanup conversion polling on unmount
+  useEffect(() => {
+    return () => {
+      if (conversionTimeoutRef.current) {
+        clearTimeout(conversionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const updateScriptMutation = useMutation({
     mutationFn: ({ slideId, lang, text }: { slideId: string; lang: string; text: string }) =>
@@ -317,8 +483,11 @@ export default function ProjectEditorPage() {
     onSuccess: () => {
       setIsSaved(true);
       queryClient.invalidateQueries({ queryKey: ["slide", selectedSlideId] });
+      queryClient.invalidateQueries({ queryKey: ["slides", projectId, currentVersion?.id] });
+      refreshSlidesStatus();
     },
   });
+  const updateScript = updateScriptMutation.mutate;
 
   // Track pending save for cleanup
   const pendingSaveRef = useRef<{ slideId: string; lang: string; text: string } | null>(null);
@@ -363,7 +532,7 @@ export default function ProjectEditorPage() {
     pendingSaveRef.current = { slideId: selectedSlideId, lang: selectedLang, text: scriptText };
 
     const timer = setTimeout(() => {
-      updateScriptMutation.mutate({
+      updateScript({
         slideId: selectedSlideId,
         lang: selectedLang,
         text: scriptText,
@@ -372,7 +541,7 @@ export default function ProjectEditorPage() {
     }, 1000); // Reduced to 1 second for better UX
 
     return () => clearTimeout(timer);
-  }, [scriptText, selectedSlideId, selectedLang]);
+  }, [scriptText, selectedSlideId, selectedLang, selectedSlide?.scripts, updateScript]);
 
   const addLanguageMutation = useMutation({
     mutationFn: (lang: string) => api.addLanguage(projectId, currentVersion!.id, lang),
@@ -429,27 +598,58 @@ export default function ProjectEditorPage() {
     },
   });
 
+  const importNotesMutation = useMutation({
+    mutationFn: () =>
+      api.importNotes(
+        projectId,
+        currentVersion!.id,
+        project?.base_language || "en"
+      ),
+    onSuccess: (data) => {
+      toast.success(
+        `Imported speaker notes into ${getLanguageName(data.lang)} scripts (${data.imported_count} slide${data.imported_count === 1 ? "" : "s"})`
+      );
+      queryClient.invalidateQueries({ queryKey: ["slides", projectId, currentVersion?.id] });
+      if (selectedSlideId) {
+        queryClient.invalidateQueries({ queryKey: ["slide", selectedSlideId] });
+      }
+      refreshSlidesStatus();
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || "Failed to import notes");
+    },
+  });
+
   const generateTTSMutation = useMutation({
     mutationFn: () => api.generateAllTTS(projectId, currentVersion!.id, selectedLang, selectedVoiceId || undefined),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setActiveTTSTask({
+        taskId: data.task_id,
+        scope: "all",
+        status: "PENDING",
+        startedAt: new Date(),
+      });
       toast.success("Generating audio for all slides...");
-      // Refresh status after a delay
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["slide"] });
-        refreshSlidesStatus();
-      }, 3000);
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || "Failed to start TTS");
     },
   });
 
   const generateSlideTTSMutation = useMutation({
     mutationFn: (slideId: string) => api.generateSlideTTS(slideId, selectedLang, selectedVoiceId || undefined),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setActiveTTSTask({
+        taskId: data.task_id,
+        scope: "slide",
+        status: "PENDING",
+        startedAt: new Date(),
+      });
       toast.success("Generating audio for this slide...");
       queryClient.invalidateQueries({ queryKey: ["slide", selectedSlideId] });
-      // Refresh status after a delay
-      setTimeout(() => {
-        refreshSlidesStatus();
-      }, 2000);
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || "Failed to start TTS");
     },
   });
 
@@ -479,17 +679,62 @@ export default function ProjectEditorPage() {
     },
   });
 
-  const addSlideMutation = useMutation({
-    mutationFn: (file: File) => api.addSlide(projectId, currentVersion!.id, file),
-    onSuccess: (data) => {
-      toast.success(`Slide added at position ${data.slide_index}`);
-      queryClient.invalidateQueries({ queryKey: ["slides", projectId, currentVersion?.id] });
-      refreshSlidesStatus();
-      // Select the new slide
-      setSelectedSlideId(data.id);
+  const addSlidesMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      const images = (files || []).filter((f) => f?.type?.startsWith("image/"));
+      if (images.length === 0) {
+        return { versionId: currentVersion?.id || null, added: [] as { id: string; slide_index: number }[] };
+      }
+
+      // Ensure we have a READY version to add slides into
+      let versionId = currentVersion?.id || null;
+      if (!versionId) {
+        const ensured = await api.ensureCurrentVersion(projectId);
+        versionId = ensured.id;
+
+        // Keep UI in sync immediately (avoid "version switched / slides disappeared" confusion)
+        setCurrentVersionId(ensured.id);
+        queryClient.setQueryData(["project", projectId], (old: any) =>
+          old ? { ...old, current_version_id: ensured.id } : old
+        );
+        queryClient.setQueryData(["versions", projectId], (old: any) => {
+          const prev = Array.isArray(old) ? old : [];
+          const without = prev.filter((v: any) => v?.id !== ensured.id);
+          return [ensured, ...without];
+        });
+      }
+
+      // If current version exists but is not ready (e.g. conversion running), block adding slides
+      if (currentVersion?.id && currentVersion.status !== "ready") {
+        throw new Error("Current version is not ready yet. Please wait for conversion to finish.");
+      }
+
+      // Add sequentially to preserve order (backend assigns slide_index)
+      const added: { id: string; slide_index: number }[] = [];
+      for (const file of images) {
+        const res = await api.addSlide(projectId, versionId, file);
+        added.push({ id: res.id, slide_index: res.slide_index });
+      }
+
+      return { versionId, added };
     },
-    onError: () => {
-      toast.error("Failed to add slide");
+    onSuccess: (data) => {
+      const addedCount = data.added?.length || 0;
+      if (addedCount > 0) {
+        toast.success(`Added ${addedCount} slide${addedCount === 1 ? "" : "s"}`);
+      }
+
+      if (data.versionId) {
+        queryClient.invalidateQueries({ queryKey: ["slides", projectId, data.versionId] });
+        queryClient.invalidateQueries({ queryKey: ["versions", projectId] });
+      }
+
+      // Select last added slide
+      const last = data.added?.[data.added.length - 1];
+      if (last?.id) setSelectedSlideId(last.id);
+    },
+    onError: (e: any) => {
+      toast.error(e?.message || "Failed to add slides");
     },
   });
 
@@ -522,10 +767,158 @@ export default function ProjectEditorPage() {
     },
   });
 
+  const renderAllMutation = useMutation({
+    mutationFn: () => api.renderAll(projectId, currentVersion!.id),
+    onSuccess: (data) => {
+      setShowRenderMenu(false);
+      const count = data.languages_count ?? data.jobs?.length ?? 0;
+      toast.success(
+        `Started rendering ${count} language${count === 1 ? "" : "s"}. Track progress in Jobs.`
+      );
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || "Failed to render all languages");
+    },
+  });
+
+  const preflightRenderAllLanguages = useCallback(async () => {
+    const slidesList = slides || [];
+    if (!slidesList.length) {
+      return { totalOutdated: 0, outdatedByLang: {} as Record<string, number[]> };
+    }
+
+    const BATCH_SIZE = 10;
+    const outdatedByLangSets: Record<string, Set<number>> = {};
+
+    for (let i = 0; i < slidesList.length; i += BATCH_SIZE) {
+      const batch = slidesList.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(batch.map((s) => api.getSlide(s.id)));
+
+      await Promise.all(
+        results.map(async (res) => {
+          if (res.status !== "fulfilled") return;
+          const details = res.value;
+
+          // Build quick lookup maps
+          const scriptByLang = new Map(details.scripts.map((s: any) => [s.lang, s]));
+          const audioByLang = new Map(details.audio_files.map((a: any) => [a.lang, a]));
+
+          // Check languages that exist on this slide (scripts and/or audio).
+          // This matches backend render_all which derives languages from SlideScript.lang across the version.
+          const langsToCheck = new Set<string>([
+            ...details.scripts.map((s: any) => s.lang),
+            ...details.audio_files.map((a: any) => a.lang),
+          ]);
+
+          await Promise.all(
+            Array.from(langsToCheck).map(async (lang) => {
+              const audio = audioByLang.get(lang);
+              if (!audio) return;
+
+              const script = scriptByLang.get(lang);
+              const scriptText = (script?.text ?? "").toString();
+
+              let synced = true;
+              if (audio?.script_text_hash) {
+                const currentScriptHash = await computeScriptHash(scriptText);
+                synced = currentScriptHash === audio.script_text_hash;
+              } else if (audio?.created_at && script?.updated_at) {
+                // Fallback for legacy audio without script hash: compare timestamps
+                synced = new Date(audio.created_at).getTime() >= new Date(script.updated_at).getTime();
+              }
+
+              if (!synced) {
+                if (!outdatedByLangSets[lang]) outdatedByLangSets[lang] = new Set<number>();
+                outdatedByLangSets[lang].add(details.slide_index);
+              }
+            })
+          );
+        })
+      );
+    }
+
+    const outdatedByLang: Record<string, number[]> = {};
+    let totalOutdated = 0;
+    for (const [lang, set] of Object.entries(outdatedByLangSets)) {
+      const slideIndices = Array.from(set).sort((a, b) => a - b);
+      outdatedByLang[lang] = slideIndices;
+      totalOutdated += slideIndices.length;
+    }
+
+    return { totalOutdated, outdatedByLang };
+  }, [slides]);
+
+  const handleRenderAllLanguages = useCallback(async () => {
+    if (renderAllMutation.isPending || !currentVersion?.id || isRenderAllPrechecking) return;
+
+    setIsRenderAllPrechecking(true);
+    try {
+      const { totalOutdated, outdatedByLang } = await preflightRenderAllLanguages();
+
+      if (totalOutdated > 0) {
+        const MAX_SLIDES_IN_LINE = 12;
+        const lines = Object.entries(outdatedByLang)
+          .filter(([, slideIndices]) => slideIndices.length > 0)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([lang, slideIndices]) => {
+            const shown = slideIndices.slice(0, MAX_SLIDES_IN_LINE);
+            const suffix =
+              slideIndices.length > MAX_SLIDES_IN_LINE
+                ? `… (+${slideIndices.length - MAX_SLIDES_IN_LINE})`
+                : "";
+            return `- ${getLanguageName(lang)} (${lang}): slides ${shown.join(", ")}${suffix}`;
+          })
+          .join("\n");
+
+        const proceed = confirm(
+          `Outdated audio found in one or more languages.\n\n${lines}\n\nRender All Languages may use old audio for those slides.\n\nOK = render anyway, Cancel = stop and re-voice first.`
+        );
+
+        if (!proceed) {
+          toast.info("Render cancelled. Re-voice outdated slides first.");
+          return;
+        }
+      }
+
+      renderAllMutation.mutate();
+    } catch (e) {
+      console.error("Render-all preflight failed:", e);
+      toast.error("Failed to check audio sync across languages");
+    } finally {
+      setIsRenderAllPrechecking(false);
+    }
+  }, [renderAllMutation, currentVersion?.id, isRenderAllPrechecking, preflightRenderAllLanguages]);
+
   // Dropzone
   const onDrop = useCallback((files: File[]) => {
-    if (files[0]) uploadMutation.mutate(files[0]);
-  }, []);
+    if (!files?.length) return;
+
+    const images = files.filter((f) => f?.type?.startsWith("image/"));
+    const other = files.filter((f) => !f?.type?.startsWith("image/"));
+
+    // Images dropped anywhere in the project should ALWAYS add slides (append).
+    if (images.length) {
+      addSlidesMutation.mutate(images);
+    }
+
+    // PPTX/PDF upload creates a NEW version (potentially confusing). Confirm when project already has slides.
+    if (other.length) {
+      const file = other[0];
+      if (other.length > 1) {
+        toast.info("Uploading multiple PPTX/PDF files at once is not supported. Using the first one.");
+      }
+      const willCreateNewVersion = true;
+      if (slides?.length && willCreateNewVersion) {
+        const ok = confirm(
+          "This will upload a new deck and create a NEW project version (vN).\\n\\n" +
+            "Your existing slides will still be in the previous version, but the editor will switch to the new one.\\n\\n" +
+            "Continue?"
+        );
+        if (!ok) return;
+      }
+      uploadMutation.mutate(file);
+    }
+  }, [addSlidesMutation, uploadMutation, slides?.length]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -537,57 +930,45 @@ export default function ProjectEditorPage() {
       "image/png": [".png"],
       "image/webp": [".webp"],
     },
-    maxFiles: 1,
+    // Allow multi-drop (many images at once)
+    maxFiles: 0,
     noClick: !!slides?.length,
   });
 
-  // Slide status cache - fetch all slides status for current language
-  const [slidesStatus, setSlidesStatus] = useState<Record<string, { hasScript: boolean; hasAudio: boolean }>>({});
-  
-  const refreshSlidesStatus = useCallback(async () => {
-    if (!slides?.length) return;
-
-    const statuses: Record<string, { hasScript: boolean; hasAudio: boolean }> = {};
-
-    // Fetch each slide's details (could be optimized with batch API)
-    for (const slide of slides) {
-      try {
-        const details = await api.getSlide(slide.id);
-        const script = details.scripts.find((s) => s.lang === selectedLang);
-        const audio = details.audio_files.find((a) => a.lang === selectedLang);
-        statuses[slide.id] = {
-          hasScript: !!script?.text && script.text.length > 0,
-          hasAudio: !!audio,
-        };
-      } catch {
-        statuses[slide.id] = { hasScript: false, hasAudio: false };
-      }
-    }
-
-    setSlidesStatus(statuses);
-  }, [slides, selectedLang]);
-
-  // Fetch status for all slides when version/language changes
-  useEffect(() => {
-    refreshSlidesStatus();
-  }, [refreshSlidesStatus]);
-  
   // Helpers
   const getSlideStatus = (slideId: string): SlideStatus => {
     const status = slidesStatus[slideId];
     if (!status) return "missing";
-    if (status.hasAudio) return "ready";
+    if (status.hasAudio && status.audioSynced) return "ready";
+    if (status.hasAudio && !status.audioSynced) return "outdated";
     if (status.hasScript) return "script-only";
     return "missing";
   };
   
-  // Audio status summary
-  const audioStats = {
-    total: slides?.length || 0,
-    withAudio: Object.values(slidesStatus).filter(s => s.hasAudio).length,
-    withScript: Object.values(slidesStatus).filter(s => s.hasScript).length,
-    missing: Object.values(slidesStatus).filter(s => !s.hasScript).length,
-  };
+  // Audio status summary - calculate based on slides list, not just loaded statuses
+  const audioStats = useMemo(() => {
+    if (!slides?.length) return { total: 0, withAudio: 0, withScript: 0, missing: 0, outdated: 0 };
+    
+    let withAudio = 0;
+    let withScript = 0;
+    let missing = 0;
+    let outdated = 0;
+    
+    for (const slide of slides) {
+      const status = slidesStatus[slide.id];
+      if (status) {
+        if (status.hasAudio) withAudio++;
+        if (status.hasAudio && !status.audioSynced) outdated++;
+        if (status.hasScript) withScript++;
+        else missing++;
+      } else {
+        // Status not loaded yet - count as missing
+        missing++;
+      }
+    }
+    
+    return { total: slides.length, withAudio, withScript, missing, outdated };
+  }, [slides, slidesStatus]);
 
   const estimatedTime = estimateDuration(scriptText);
   const isTooLong = estimatedTime > 30;
@@ -634,10 +1015,9 @@ export default function ProjectEditorPage() {
 
   // Dropzone for adding new slides (images)
   const onDropSlideImage = useCallback((files: File[]) => {
-    if (files[0] && currentVersion) {
-      addSlideMutation.mutate(files[0]);
-    }
-  }, [currentVersion]);
+    if (!files?.length) return;
+    addSlidesMutation.mutate(files);
+  }, [addSlidesMutation]);
 
   const { getRootProps: getSlideDropRootProps, getInputProps: getSlideDropInputProps, isDragActive: isSlideDropActive } = useDropzone({
     onDrop: onDropSlideImage,
@@ -646,8 +1026,11 @@ export default function ProjectEditorPage() {
       "image/jpeg": [".jpg", ".jpeg"],
       "image/webp": [".webp"],
     },
-    maxFiles: 1,
+    // Allow multiple images at once
+    maxFiles: 0,
     noClick: false,
+    // Prevent the outer (project upload) dropzone from also handling this drop.
+    noDragEventsBubbling: true,
   });
 
   if (projectLoading) {
@@ -673,7 +1056,26 @@ export default function ProjectEditorPage() {
           </Link>
           <div className="flex items-center gap-2">
             <span className="font-medium text-[14px]">{project?.name}</span>
-            <Badge variant="secondary">v{currentVersion?.version_number || 1}</Badge>
+            {versions && versions.length > 1 ? (
+              <Select
+                value={currentVersion?.id || ""}
+                onChange={(e) => {
+                  setCurrentVersionId(e.target.value);
+                  // Reset selection so we don't keep a slide from a different version selected
+                  setSelectedSlideId(null);
+                }}
+                className="w-20"
+                title="Project version"
+              >
+                {versions.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    v{v.version_number}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Badge variant="secondary">v{currentVersion?.version_number || 1}</Badge>
+            )}
           </div>
         </div>
 
@@ -717,7 +1119,10 @@ export default function ProjectEditorPage() {
                     setActiveRenderJob(null);
                     toast.success("Render cancelled");
                   } catch (e) {
-                    toast.error("Failed to cancel render");
+                    // Clear the stuck render state even if cancel fails
+                    // (task may already be dead/completed)
+                    setActiveRenderJob(null);
+                    toast.info("Render status cleared");
                   }
                 }}
                 className="ml-1 p-1 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-500 transition-colors"
@@ -744,6 +1149,16 @@ export default function ProjectEditorPage() {
                   <div className="fixed inset-0 z-40" onClick={() => setShowRenderMenu(false)} />
                   <div className="absolute right-0 mt-1 w-64 bg-surface border border-border rounded-lg shadow-dropdown z-50 py-1">
                     {/* Audio status info */}
+                    {audioStats.outdated > 0 && (
+                      <div className="px-3 py-2 text-[11px] border-b border-border bg-orange-50">
+                        <span className="text-orange-600 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          {audioStats.outdated} slide(s) have outdated audio!
+                          <br />
+                          Script was changed after voicing. Re-voice to update.
+                        </span>
+                      </div>
+                    )}
                     {audioStats.withAudio < audioStats.total && (
                       <div className="px-3 py-2 text-[11px] text-muted-foreground border-b border-border bg-muted/30">
                         {audioStats.withAudio === 0 ? (
@@ -771,14 +1186,17 @@ export default function ProjectEditorPage() {
                       Render {getLanguageName(selectedLang)}
                     </button>
                     <button
-                      onClick={() => {
-                        toast.info("Render all coming soon");
-                      }}
-                      className="w-full px-3 py-2 text-left text-[13px] hover:bg-muted flex items-center gap-2"
-                      title="Start rendering videos for all languages (coming soon)"
+                      onClick={handleRenderAllLanguages}
+                      disabled={isRenderAllPrechecking || renderAllMutation.isPending || !currentVersion?.id}
+                      className="w-full px-3 py-2 text-left text-[13px] hover:bg-muted flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Start rendering videos for all languages"
                     >
                       <Languages className="w-4 h-4" />
-                      Render All Languages
+                      {isRenderAllPrechecking
+                        ? "Checking audio sync..."
+                        : renderAllMutation.isPending
+                          ? "Starting..."
+                          : "Render All Languages"}
                     </button>
                   </div>
                 </>
@@ -906,17 +1324,57 @@ export default function ProjectEditorPage() {
           {/* Slides */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-2">
             {!slides?.length ? (
-              <div
-                className={cn(
-                  "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
-                  isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
-                )}
-              >
-                <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-[13px] font-medium">Upload file</p>
-                <p className="text-label text-muted-foreground mt-0.5">
-                  PPTX, PDF, or image
-                </p>
+              <div className="space-y-3">
+                <div
+                  className={cn(
+                    "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+                    isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
+                  )}
+                >
+                  <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-[13px] font-medium">Upload file</p>
+                  <p className="text-label text-muted-foreground mt-0.5">
+                    PPTX, PDF, or image
+                  </p>
+                </div>
+
+                {/* DEV helper: upload by path (avoids OS file picker limitations in automation) */}
+                <div
+                  className="rounded-lg border border-border bg-surface/60 p-3"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[12px] font-medium text-muted-foreground">
+                      Dev: Upload from path
+                    </p>
+                    <Badge variant="secondary" className="text-[10px]">
+                      ENV=dev
+                    </Badge>
+                  </div>
+
+                  <div className="mt-2 flex gap-2">
+                    <Input
+                      value={uploadPath}
+                      onChange={(e) => setUploadPath(e.target.value)}
+                      placeholder="/absolute/path/to/file.pptx"
+                      className="text-[12px]"
+                    />
+                    <Button
+                      size="sm"
+                      disabled={uploadFromPathMutation.isPending || !uploadPath.trim()}
+                      onClick={() => uploadFromPathMutation.mutate(uploadPath.trim())}
+                      className="shrink-0"
+                    >
+                      {uploadFromPathMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        "Upload"
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </div>
             ) : (
               <DndContext
@@ -959,11 +1417,11 @@ export default function ProjectEditorPage() {
                 className={cn(
                   "border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors",
                   isSlideDropActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/40",
-                  addSlideMutation.isPending && "opacity-50 pointer-events-none"
+                  addSlidesMutation.isPending && "opacity-50 pointer-events-none"
                 )}
               >
                 <input {...getSlideDropInputProps()} />
-                {addSlideMutation.isPending ? (
+                {addSlidesMutation.isPending ? (
                   <Loader2 className="w-5 h-5 mx-auto animate-spin text-muted-foreground" />
                 ) : (
                   <>
@@ -984,14 +1442,26 @@ export default function ProjectEditorPage() {
           {selectedSlide ? (
             <>
               {/* Preview */}
-              <div className="flex-1 flex items-center justify-center p-6">
-                <div className="aspect-video w-full max-w-4xl bg-white rounded-lg shadow-card border border-border overflow-hidden">
+              <div className="flex-1 flex items-center justify-center p-6 relative">
+                <div className="aspect-video w-full max-w-4xl bg-white rounded-lg shadow-card border border-border overflow-hidden relative group">
                   <img
-                    src={api.getSlideImageUrl(selectedSlide.image_url)}
+                    src={api.getSlideImageUrl(selectedSlide.preview_url || selectedSlide.image_url)}
                     alt={`Slide ${slides?.findIndex((s) => s.id === selectedSlideId)! + 1}`}
                     className="w-full h-full object-contain bg-white"
                     loading="eager"
                   />
+                  {/* Canvas Editor button overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => setShowCanvasEditor(true)}
+                      className="gap-2"
+                    >
+                      <ImagePlus className="w-4 h-4" />
+                      Edit Canvas
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -1106,8 +1576,31 @@ export default function ProjectEditorPage() {
               
               <div className="flex items-center justify-between mt-2 text-label text-muted-foreground">
                 <span>{scriptText.length} characters</span>
-                <span>~{formatDuration(estimatedTime)} voice time</span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={showMarkers ? "default" : "ghost"}
+                    size="sm"
+                    type="button"
+                    onClick={() => setShowMarkers((v) => !v)}
+                    className={cn("h-7 px-2", !showMarkers && "text-muted-foreground")}
+                    title="Show markers editor (word anchors for animations)"
+                  >
+                    <Tag className="w-3.5 h-3.5 mr-1" />
+                    Markers
+                  </Button>
+                  <span>~{formatDuration(estimatedTime)} voice time</span>
+                </div>
               </div>
+
+              {showMarkers && (
+                <div className="mt-3">
+                  <MarkersManager
+                    slideId={selectedSlide.id}
+                    lang={selectedLang}
+                    scriptText={scriptText}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Audio Status Summary */}
@@ -1118,8 +1611,14 @@ export default function ProjectEditorPage() {
                     <span className="text-muted-foreground">Audio status:</span>
                     <span className="flex items-center gap-1">
                       <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                      {audioStats.withAudio}/{audioStats.total} ready
+                      {audioStats.withAudio - audioStats.outdated}/{audioStats.total} ready
                     </span>
+                    {audioStats.outdated > 0 && (
+                      <span className="flex items-center gap-1 text-orange-600">
+                        <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                        {audioStats.outdated} outdated
+                      </span>
+                    )}
                     {audioStats.withScript - audioStats.withAudio > 0 && (
                       <span className="flex items-center gap-1 text-amber-600">
                         <div className="w-2 h-2 rounded-full bg-amber-500" />
@@ -1133,7 +1632,12 @@ export default function ProjectEditorPage() {
                       </span>
                     )}
                   </div>
-                  {audioStats.withAudio < audioStats.total && audioStats.withAudio > 0 && (
+                  {audioStats.outdated > 0 && (
+                    <span className="text-orange-600 font-medium">
+                      ⚠️ Re-voice outdated slides before render
+                    </span>
+                  )}
+                  {audioStats.withAudio < audioStats.total && audioStats.withAudio > 0 && audioStats.outdated === 0 && (
                     <span className="text-muted-foreground">
                       ✓ OK to render with partial audio
                     </span>
@@ -1180,6 +1684,28 @@ export default function ProjectEditorPage() {
 
             {/* Actions */}
             <div className="shrink-0 p-4 pt-3 flex flex-wrap gap-2 border-t border-border">
+              {selectedLang === project?.base_language && !activeTranslationJob && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const base = project?.base_language || "en";
+                    if (
+                      confirm(
+                        `Import speaker notes from PPTX into ${base.toUpperCase()} scripts? This will overwrite existing ${base.toUpperCase()} scripts on slides that have notes.`
+                      )
+                    ) {
+                      importNotesMutation.mutate();
+                    }
+                  }}
+                  disabled={importNotesMutation.isPending || !currentVersion?.id}
+                  title="Import speaker notes from PPTX into base-language scripts"
+                >
+                  <BookText className="w-3.5 h-3.5" />
+                  {importNotesMutation.isPending ? "Importing..." : "Import Notes"}
+                </Button>
+              )}
+
               {selectedLang !== project?.base_language && !activeTranslationJob && (
                 <Button
                   variant="secondary"
@@ -1268,11 +1794,25 @@ export default function ProjectEditorPage() {
           </div>
         </div>
       )}
+
+      {/* Canvas Editor Modal */}
+      {showCanvasEditor && selectedSlideId && selectedSlide && (
+        <div className="fixed inset-0 z-50 bg-black">
+          <CanvasEditor
+            slideId={selectedSlideId}
+            projectId={projectId}
+            slideImageUrl={selectedSlide.image_url}
+            availableLanguages={availableLanguages}
+            baseLanguage={project?.base_language || "en"}
+            onClose={() => setShowCanvasEditor(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-type SlideStatus = "ready" | "script-only" | "missing";
+type SlideStatus = "ready" | "outdated" | "script-only" | "missing";
 
 interface SlideWithStatus extends Slide {
   hasScript?: boolean;
@@ -1348,7 +1888,7 @@ function SlideThumb({
             className="absolute inset-0 z-10"
           />
           <img
-            src={api.getSlideImageUrl(slide.image_url)}
+            src={api.getSlideImageUrl(slide.preview_url || slide.image_url)}
             alt={`Slide ${index + 1}`}
             className="w-full h-full object-contain bg-white pointer-events-none"
             loading="lazy"
@@ -1363,6 +1903,9 @@ function SlideThumb({
           <div className="absolute top-1.5 right-1.5 z-20">
             {status === "ready" && (
               <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" title="Audio ready" />
+            )}
+            {status === "outdated" && (
+              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" title="Audio outdated - script changed, re-voice needed" />
             )}
             {status === "script-only" && (
               <div className="w-2.5 h-2.5 rounded-full bg-amber-500" title="Script only - no audio" />

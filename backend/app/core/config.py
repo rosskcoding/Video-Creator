@@ -22,6 +22,21 @@ def _default_data_dir() -> Path:
     return repo_root / "data" / "projects"
 
 
+def _default_render_output_dir() -> Path:
+    """
+    Default shared output directory for render-service generated clips.
+
+    - In Docker images we use /app/output
+    - In local dev we use <repo_root>/tmp/render-service-out
+    """
+    docker_path = Path("/app/output")
+    if docker_path.exists() or Path("/app").exists():
+        return docker_path
+
+    repo_root = Path(__file__).resolve().parents[3]
+    return repo_root / "tmp" / "render-service-out"
+
+
 class Settings(BaseSettings):
     """Application settings with defaults from ТЗ"""
     
@@ -95,6 +110,13 @@ class Settings(BaseSettings):
     # HTTP client timeouts (seconds)
     TTS_HTTP_TIMEOUT_SEC: int = 60  # ElevenLabs API timeout
     TRANSLATE_HTTP_TIMEOUT_SEC: int = 120  # OpenAI API timeout (batch translations can be slow)
+    
+    # Render service (Puppeteer-based)
+    RENDER_SERVICE_URL: str = "http://localhost:3001"  # Docker: http://render-service:3001
+    RENDER_OUTPUT_DIR: Path = Field(default_factory=_default_render_output_dir)
+    RENDER_SERVICE_TIMEOUT_SEC: int = 600  # 10 min per slide
+    RENDER_SERVICE_BATCH_CONCURRENCY: int = 3  # Hint for /render-batch parallelism
+    USE_RENDER_SERVICE: bool = False  # Enable browser-based render with animations
 
     class Config:
         env_file = ".env"

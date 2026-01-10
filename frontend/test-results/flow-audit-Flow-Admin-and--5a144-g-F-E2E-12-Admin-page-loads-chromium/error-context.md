@@ -1,0 +1,190 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - link [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img [ref=e5]
+      - navigation [ref=e8]:
+        - link "Projects" [ref=e9] [cursor=pointer]:
+          - /url: /
+          - img [ref=e10]
+          - generic: Projects
+        - link "Workspace" [ref=e12] [cursor=pointer]:
+          - /url: /workspace
+          - img [ref=e13]
+          - generic: Workspace
+        - link "Jobs" [ref=e16] [cursor=pointer]:
+          - /url: /admin/jobs
+          - img [ref=e17]
+          - generic: Jobs
+        - link "Admin" [ref=e20] [cursor=pointer]:
+          - /url: /admin
+          - img [ref=e21]
+          - generic: Admin
+        - link "Help" [ref=e24] [cursor=pointer]:
+          - /url: /help
+          - img [ref=e25]
+          - generic: Help
+    - main [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - heading "Glossary & Translation Rules" [level=1] [ref=e31]
+          - paragraph [ref=e32]: Manage translation settings for all projects
+        - main [ref=e33]:
+          - generic [ref=e34]:
+            - generic [ref=e35]:
+              - generic [ref=e36]:
+                - heading "Voice Settings (ElevenLabs)" [level=3] [ref=e37]:
+                  - img [ref=e38]
+                  - text: Voice Settings (ElevenLabs)
+                - paragraph [ref=e41]: Управление голосами для Text-to-Speech
+              - generic [ref=e42]:
+                - generic [ref=e43]:
+                  - generic [ref=e44]: Default Voice ID
+                  - generic [ref=e45]:
+                    - textbox "Voice ID..." [ref=e46]: iBcRJa9DRdlJlVihC0V6
+                    - button "Копировать Voice ID" [ref=e47] [cursor=pointer]:
+                      - img [ref=e48]
+                  - paragraph [ref=e51]: Используется по умолчанию для новых проектов
+                - generic [ref=e52]:
+                  - generic [ref=e53]: Доступные голоса ElevenLabs
+                  - generic [ref=e54]: Загрузка голосов...
+                - generic [ref=e55]:
+                  - img [ref=e56]
+                  - paragraph [ref=e58]: Voice ID используется для генерации речи через ElevenLabs API. Выберите голос из списка или вставьте свой Voice ID.
+            - generic [ref=e59]:
+              - generic [ref=e60]:
+                - heading "Do Not Translate" [level=3] [ref=e61]
+                - paragraph [ref=e62]: Terms that should remain in the original language
+              - generic [ref=e63]:
+                - generic [ref=e64]:
+                  - generic [ref=e65]:
+                    - text: IFRS
+                    - button "Remove term" [ref=e66] [cursor=pointer]:
+                      - img [ref=e67]
+                  - generic [ref=e70]:
+                    - text: CSRD
+                    - button "Remove term" [ref=e71] [cursor=pointer]:
+                      - img [ref=e72]
+                  - generic [ref=e75]:
+                    - text: ESG
+                    - button "Remove term" [ref=e76] [cursor=pointer]:
+                      - img [ref=e77]
+                  - generic [ref=e80]:
+                    - text: KPI
+                    - button "Remove term" [ref=e81] [cursor=pointer]:
+                      - img [ref=e82]
+                  - generic [ref=e85]:
+                    - text: EBITDA
+                    - button "Remove term" [ref=e86] [cursor=pointer]:
+                      - img [ref=e87]
+                  - generic [ref=e90]:
+                    - text: Scope 1
+                    - button "Remove term" [ref=e91] [cursor=pointer]:
+                      - img [ref=e92]
+                  - generic [ref=e95]:
+                    - text: Scope 2
+                    - button "Remove term" [ref=e96] [cursor=pointer]:
+                      - img [ref=e97]
+                  - generic [ref=e100]:
+                    - text: Scope 3
+                    - button "Remove term" [ref=e101] [cursor=pointer]:
+                      - img [ref=e102]
+                - generic [ref=e105]:
+                  - textbox "Add term..." [ref=e106]
+                  - button "Add" [ref=e107] [cursor=pointer]:
+                    - img [ref=e108]
+                    - text: Add
+                - generic [ref=e109]:
+                  - button "Import" [ref=e110] [cursor=pointer]:
+                    - img [ref=e111]
+                    - text: Import
+                  - button "Export" [ref=e114] [cursor=pointer]:
+                    - img [ref=e115]
+                    - text: Export
+            - generic [ref=e118]:
+              - generic [ref=e119]:
+                - heading "Preferred Translations" [level=3] [ref=e120]
+                - paragraph [ref=e121]: Specific translations for terms per language
+              - generic [ref=e122]:
+                - table [ref=e124]:
+                  - rowgroup [ref=e125]:
+                    - row "Term Language Translation" [ref=e126]:
+                      - columnheader "Term" [ref=e127]
+                      - columnheader "Language" [ref=e128]
+                      - columnheader "Translation" [ref=e129]
+                      - columnheader [ref=e130]
+                  - rowgroup [ref=e131]:
+                    - row "materiality Russian существенность Remove preferred translation" [ref=e132]:
+                      - cell "materiality" [ref=e133]
+                      - cell "Russian" [ref=e134]
+                      - cell "существенность" [ref=e135]
+                      - cell "Remove preferred translation" [ref=e136]:
+                        - button "Remove preferred translation" [ref=e137] [cursor=pointer]:
+                          - img [ref=e138]
+                    - row "materiality Ukrainian суттєвість Remove preferred translation" [ref=e141]:
+                      - cell "materiality" [ref=e142]
+                      - cell "Ukrainian" [ref=e143]
+                      - cell "суттєвість" [ref=e144]
+                      - cell "Remove preferred translation" [ref=e145]:
+                        - button "Remove preferred translation" [ref=e146] [cursor=pointer]:
+                          - img [ref=e147]
+                    - row "stakeholder Russian заинтересованная сторона Remove preferred translation" [ref=e150]:
+                      - cell "stakeholder" [ref=e151]
+                      - cell "Russian" [ref=e152]
+                      - cell "заинтересованная сторона" [ref=e153]
+                      - cell "Remove preferred translation" [ref=e154]:
+                        - button "Remove preferred translation" [ref=e155] [cursor=pointer]:
+                          - img [ref=e156]
+                - generic [ref=e159]:
+                  - generic [ref=e160]:
+                    - generic [ref=e161]: Term
+                    - textbox "e.g., sustainability" [ref=e162]
+                  - generic [ref=e163]:
+                    - generic [ref=e164]: Language
+                    - generic [ref=e165]:
+                      - combobox [ref=e166]:
+                        - option "English"
+                        - option "Russian" [selected]
+                        - option "Spanish"
+                        - option "German"
+                        - option "French"
+                        - option "Chinese"
+                        - option "Japanese"
+                        - option "Korean"
+                        - option "Portuguese"
+                        - option "Italian"
+                        - option "Arabic"
+                        - option "Hindi"
+                        - option "Ukrainian"
+                        - option "Polish"
+                        - option "Dutch"
+                        - option "Turkish"
+                        - option "Vietnamese"
+                        - option "Thai"
+                      - img
+                  - generic [ref=e167]:
+                    - generic [ref=e168]: Translation
+                    - textbox "Translation..." [ref=e169]
+                  - button "Add" [ref=e170] [cursor=pointer]:
+                    - img [ref=e171]
+                    - text: Add
+            - generic [ref=e172]:
+              - heading "Translation Style" [level=3] [ref=e174]
+              - generic [ref=e175]:
+                - generic [ref=e176]:
+                  - generic [ref=e177]: Style
+                  - generic [ref=e178]:
+                    - button "Formal" [ref=e179] [cursor=pointer]
+                    - button "Neutral" [ref=e180] [cursor=pointer]
+                    - button "Friendly" [ref=e181] [cursor=pointer]
+                - generic [ref=e182]:
+                  - img [ref=e183]
+                  - paragraph [ref=e185]: Numbers, percentages, tickers, and acronyms are always preserved automatically.
+            - button "Save Changes" [ref=e187] [cursor=pointer]
+  - region "Notifications alt+T"
+  - alert [ref=e188]
+```

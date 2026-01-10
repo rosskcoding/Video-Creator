@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, FolderOpen, Languages, Image, Clock, AlertCircle, WifiOff, RefreshCw, Trash2, MoreVertical } from "lucide-react";
+import { Plus, Search, FolderOpen, Languages, Image as ImageIcon, Clock, AlertCircle, WifiOff, RefreshCw, Trash2, MoreVertical } from "lucide-react";
 import { api, Project, isAuthenticated } from "@/lib/api";
 import { Button, Input, Badge, Card } from "@/components/ui";
 import { CreateProjectModal } from "@/components/CreateProjectModal";
@@ -175,7 +175,7 @@ function ProjectCard({ project }: { project: Project }) {
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Image className="w-5 h-5 text-primary" />
+                <ImageIcon className="w-5 h-5 text-primary" />
               </div>
               <div>
                 <h3 className="font-medium text-[14px] group-hover:text-primary transition-colors">
@@ -203,7 +203,7 @@ function ProjectCard({ project }: { project: Project }) {
 
           <div className="flex items-center gap-4 text-label text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <Image className="w-3.5 h-3.5" />
+              <ImageIcon className="w-3.5 h-3.5" />
               {project.slide_count} slides
             </span>
             <span className="flex items-center gap-1.5">

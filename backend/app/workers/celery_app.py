@@ -1,7 +1,9 @@
 """
 Celery application configuration
 """
+import asyncio
 from celery import Celery
+from celery.signals import worker_shutdown
 from kombu import Queue
 
 from app.core.config import settings
@@ -66,4 +68,17 @@ celery_app.conf.task_annotations = {
         "default_retry_delay": 10,
     },
 }
+
+
+@worker_shutdown.connect
+def cleanup_on_shutdown(**kwargs):
+    """Dispose Celery database engine on worker shutdown to prevent connection leaks."""
+    from app.db.database import dispose_celery_engine
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(dispose_celery_engine())
+        loop.close()
+    except Exception:
+        pass  # Best effort cleanup
 

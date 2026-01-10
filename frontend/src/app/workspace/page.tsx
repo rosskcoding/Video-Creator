@@ -67,14 +67,15 @@ export default function WorkspacePage() {
   const handleDownload = (item: WorkspaceExport, type: "video" | "srt" | "pptx") => {
     if (type === "pptx") {
       const url = api.getPptxDownloadUrl(item.project_id, item.version_id);
-      window.open(url, "_blank");
+      window.open(url, "_blank", "noreferrer,noopener");
       return;
     }
+    // Use actual filename from API response instead of guessing
     const filename = type === "video" 
-      ? `deck_${item.lang}.mp4`
-      : `deck_${item.lang}.srt`;
+      ? item.video_file
+      : item.video_file.replace(/\.mp4$/, ".srt");
     const url = api.getDownloadUrl(item.project_id, item.version_id, item.lang, filename);
-    window.open(url, "_blank");
+    window.open(url, "_blank", "noreferrer,noopener");
   };
 
   const formatDate = (dateStr: string) => {

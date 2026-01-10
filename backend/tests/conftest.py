@@ -46,6 +46,7 @@ from app.main import app
 from app.db.models import (
     Project, ProjectVersion, ProjectAudioSettings, ProjectTranslationRules,
     Slide, SlideScript, SlideAudio, AudioAsset, RenderJob,
+    SlideScene, SlideMarkers, NormalizedScript, Asset,
     ProjectStatus, ScriptSource, JobType, JobStatus, DuckingStrength, TranslationStyle
 )
 
